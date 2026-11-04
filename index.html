@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f8edcf">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Julia · Flower Girl</title>
+  <link rel="icon" href="engine/8dc5496cc5f447a6c99146ba87c1c109d642cea2/index.icon.png">
+  <link rel="preload" href="menu-art.04edf4288cc53fa2f1ca70f905ac0ab4a8354a58dce0e8fec2185ddda1594788.png" as="image" fetchpriority="high">
+  <style>
+    @font-face { font-family: JuliaDisplay; src: url('menu-font.2ba02e68b152868aef9ba28e24b3648c7d457fe6f25c761f2c2c53fb61a73fc8.ttf') format('truetype'); font-weight: 300 700; font-display: swap; }
+    :root { font-family: JuliaDisplay, system-ui, sans-serif; background: #f8edcf; color: #493126; }
+    * { box-sizing: border-box; }
+    html, body, #stage { margin: 0; width: 100%; height: 100%; overflow: hidden; }
+    body { height: 100dvh; }
+    [hidden] { display: none !important; }
+    #stage { position: relative; }
+    #stage:fullscreen { width: 100vw; height: 100dvh; background: #000; }
+    #stage:-webkit-full-screen { width: 100vw; height: 100vh; background: #000; }
+    canvas { display: block; width: 100%; height: 100%; background: #f8edcf; touch-action: none; outline: none; }
+    #loading { position: absolute; inset: 0; overflow: hidden; background: #f8edcf; }
+    .menu-art { width: 100%; height: 100%; object-fit: cover; object-position: center; }
+    .paper { position: absolute; inset: 0; background: linear-gradient(90deg, #f8edcf99 0 22%, transparent 55%); }
+    .intro { position: absolute; left: 2.2%; top: 10%; width: 32%; text-align: center; }
+    h1 { font-size: clamp(56px, 7vw, 96px); font-weight: 700; line-height: 1.15; margin: 0; color: #b92d60; text-shadow: 0 2px #cc942f; }
+    .subtitle { font-size: clamp(16px, 1.65vw, 23px); line-height: 1.5; margin: 12px 0 38px; }
+    #status { font-size: 17px; margin: 0 0 12px; }
+    progress { display: block; width: 96px; height: 5px; margin: auto; accent-color: #267c78; }
+    #retry { min-width: 120px; min-height: 44px; margin: 12px 0; border: 2px solid #d6a22d; border-radius: 16px; background: #267c78; color: #fff4d8; font: 600 18px JuliaDisplay, sans-serif; cursor: pointer; }
+    #retry:focus-visible { outline: 3px solid #d6a22d; outline-offset: -3px; }
+    @media (orientation: portrait) {
+      .menu-art { height: 48%; object-position: 74% center; }
+      .paper { background: linear-gradient(transparent 7%, #f8edcf 43%); }
+      .intro { left: 5%; top: 35%; width: 90%; }
+      h1 { font-size: 72px; }
+      .subtitle { font-size: 21px; margin-bottom: 42px; }
+    }
+    @media (max-height: 420px) and (orientation: landscape) {
+      .intro { top: 6%; width: 38%; }
+      h1 { font-size: 56px; }
+      .subtitle { margin: 6px 0 22px; font-size: 16px; }
+    }
+  </style>
+</head>
+<body data-state="loading">
+  <main id="stage">
+    <canvas id="canvas" tabindex="0" aria-label="Julia Flower Girl game">הדפדפן הזה אינו תומך במשחק.</canvas>
+    <section id="loading" aria-label="טעינת המשחק">
+      <img class="menu-art" src="menu-art.04edf4288cc53fa2f1ca70f905ac0ab4a8354a58dce0e8fec2185ddda1594788.png" alt="" fetchpriority="high" aria-hidden="true">
+      <div class="paper" aria-hidden="true"></div>
+      <div class="intro">
+        <h1>ג׳וליה</h1>
+        <p class="subtitle"><span class="menu-location" dir="rtl"><bdi dir="rtl">סן פרנסיסקו,</bdi> <bdi dir="ltr">1967</bdi>.</span><br>הזמן נשבר.</p>
+        <p id="status" role="status" aria-live="polite">טוען…</p>
+        <progress id="progress" value="0" max="1" aria-label="טעינת המשחק"></progress>
+        <button id="retry" type="button" hidden>ניסיון נוסף</button>
+      </div>
+    </section>
+  </main>
+  <noscript>כדי לשחק יש לאפשר JavaScript בדפדפן.</noscript>
+  <script id="game-config" type="application/json">{"args":[],"canvasResizePolicy":0,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"engine/8dc5496cc5f447a6c99146ba87c1c109d642cea2/index","experimentalVK":true,"fileSizes":{"engine/8dc5496cc5f447a6c99146ba87c1c109d642cea2/index.wasm":39513091,"engine/8dc5496cc5f447a6c99146ba87c1c109d642cea2/index.pck":682375100},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4,"mainPack":"engine/8dc5496cc5f447a6c99146ba87c1c109d642cea2/index.pck","serviceWorker":"","persistentPaths":["/userfs"]}</script>
+  <script id="web-config" type="application/json">{"commit":"8dc5496cc5f447a6c99146ba87c1c109d642cea2","engine":"engine/8dc5496cc5f447a6c99146ba87c1c109d642cea2/index.js","manifest":"game-manifest.fd57079804475be414e134221f7046e0a70bd901b599392c9620f9746f01e20d.json","total_bytes":721888191}</script>
+  <script type="module" src="player.1c013b66aa8e3cb1dfdaf2c39d4e2c75869c85ab1412c09855f761fe3b84f3d0.mjs"></script>
+</body>
+</html>
