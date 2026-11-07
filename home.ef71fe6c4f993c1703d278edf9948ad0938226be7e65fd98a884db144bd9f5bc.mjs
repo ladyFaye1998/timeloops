@@ -25,8 +25,8 @@ const SECRETS = {
 // Normalized scene coordinates; the art owner can tune these without
 // changing the native game or the canvas below this home layer.
 const GEOMETRY = {
-  desktop: { actor: { centerX: .68, top: .36, bottom: .925, maxWidth: .30 }, reflection: { x: .704, y: .36, w: .11, h: .28 }, mel: { x: .585, y: .61, w: .027, h: .045 } },
-  portrait: { actor: { centerX: .625, top: .27, bottom: .65, maxWidth: .52 }, reflection: { x: .74, y: .32, w: .235, h: .22 }, mel: { x: .39, y: .445, w: .10, h: .055 } },
+  desktop: { actor: { centerX: .68, top: .36, bottom: .925, maxWidth: .30 }, reflection: { x: .704, y: .36, w: .11, h: .28 }, mel: { x: 942 / 1672, y: 280 / 941, w: 125 / 1672, h: 94 / 941 } },
+  portrait: { actor: { hand: [403, 356], sill: [690, 922], scale: .94 }, reflection: { x: 620 / 852, y: 600 / 1846, w: 170 / 852, h: 239 / 1846 }, mel: { x: 282 / 852, y: 614 / 1846, w: 155 / 852, h: 110 / 1846 } },
 };
 const REGISTRATION = { head: [180, 3, 153, 138], eyes: [239, 52, 73, 39], offsets: { 1: [30, 1], 2: [0, 0], 3: [30, 1] }, feather: 2, neckFade: [119, 141] };
 const instances = new WeakMap();
@@ -70,19 +70,30 @@ export function installHomeMenu({ canvas, stage, config = {} } = {}) {
       <button type="button" class="julia-home__item" data-language-toggle data-copy="language" aria-expanded="false" aria-controls="julia-home-languages"></button>
     </nav><div class="julia-home__languages" id="julia-home-languages" hidden><label><span data-copy="language"></span><select></select></label></div>
     <div class="julia-home__loading" aria-hidden="true"><span></span><progress max="1" value="0"></progress></div></div>
-    <div class="julia-home__tools"><div class="julia-home__edition" role="group"><span data-copy="edition"></span><button type="button" data-action="edition" data-value="modern" data-copy="modern" aria-pressed="true"></button><button type="button" data-action="edition" data-value="legacy" data-copy="legacy" aria-pressed="false"></button></div>
-    <button type="button" class="julia-home__fullscreen" data-action="fullscreen"><span aria-hidden="true">⛶</span><span data-copy="fullscreen"></span></button></div>
-    <button type="button" class="julia-home__date" data-secret="date"></button>
+    <div class="julia-home__footer"><button type="button" class="julia-home__date" data-secret="date"></button>
+    <div class="julia-home__tools"><button type="button" class="julia-home__mode-toggle" aria-expanded="false" aria-controls="julia-home-mode-panel"><span data-current-edition></span><span aria-hidden="true">⌄</span></button>
+    <div class="julia-home__mode-panel" id="julia-home-mode-panel"><div class="julia-home__edition" role="group"><span data-copy="edition"></span><button type="button" data-action="edition" data-value="modern" data-copy="modern" aria-pressed="true"></button><button type="button" data-action="edition" data-value="legacy" data-copy="legacy" aria-pressed="false"></button></div>
+    <button type="button" class="julia-home__fullscreen" data-action="fullscreen"><span aria-hidden="true">⛶</span><span data-copy="fullscreen"></span></button></div></div></div>
     <aside class="julia-home__secret" role="dialog" aria-modal="false" hidden><div id="julia-home-secret-copy" aria-live="polite"></div><button type="button" class="julia-home__secret-close">×</button></aside>`;
   stage.append(root);
   const $ = selector => root.querySelector(selector);
+  // Reuse the shipped seamless loader and its static reduced-motion image.
+  for (const kind of ['animated', 'static']) {
+    const source = document.querySelector(`#loading .loading-flower--${kind}`);
+    if (source) {
+      const icon = source.cloneNode();
+      icon.className = `julia-home__loading-flower julia-home__loading-flower--${kind}`;
+      $('.julia-home__loading').prepend(icon);
+    }
+  }
   const actorCanvas = $('.julia-home__actor');
   const menu = $('.julia-home__menu');
   const languageButton = $('[data-language-toggle]');
   const languagePanel = $('.julia-home__languages');
   const languagePicker = $('.julia-home__languages select');
+  const modeToggle = $('.julia-home__mode-toggle');
   const secretPanel = $('.julia-home__secret');
-  const commands = [...root.querySelectorAll('[data-action], [data-language-toggle], [data-secret], .julia-home__languages select')];
+  const commands = [...root.querySelectorAll('[data-action], [data-language-toggle], [data-secret], .julia-home__languages select, .julia-home__mode-toggle')];
   const motion = matchMedia('(prefers-reduced-motion: reduce)');
   const timers = new Map();
   const errors = [];
@@ -95,6 +106,7 @@ export function installHomeMenu({ canvas, stage, config = {} } = {}) {
   let loadingMode = false;
   let portraitReady = false;
   let activeSecret = '';
+  let modeOpen = false;
   let reflectionDraws = 0;
   let reflectionPainted = false;
   let secretReturnFocus;
@@ -119,10 +131,17 @@ export function installHomeMenu({ canvas, stage, config = {} } = {}) {
     languagePanel.hidden = true; languageButton.setAttribute('aria-expanded', 'false');
     if (returnFocus && wasOpen) languageButton.focus();
   }
+  function closeMode(returnFocus = false) {
+    const wasOpen = modeOpen;
+    modeOpen = false; root.dataset.modeOpen = 'false';
+    modeToggle.setAttribute('aria-expanded', 'false');
+    if (returnFocus && wasOpen) modeToggle.focus({ preventScroll: true });
+  }
   function resetScene() {
     root.style.setProperty('--home-x', '0px'); root.style.setProperty('--home-y', '0px');
   }
   function closeSecret(returnFocus = false) {
+    root.dataset.secret = '';
     secretPanel.hidden = true; activeSecret = ''; root.classList.remove('julia-home--reflection-fading');
     clearTimeout(timers.get('secret')); timers.delete('secret');
     if (returnFocus && secretReturnFocus?.isConnected && visible) {
@@ -138,6 +157,7 @@ export function installHomeMenu({ canvas, stage, config = {} } = {}) {
     context.restore(); reflectionPainted = true; reflectionDraws++;
   }
   function fillSecret() {
+    secretPanel.dataset.kind = activeSecret;
     const body = $('#julia-home-secret-copy'); body.replaceChildren();
     const lines = activeSecret === 'date' ? [secretCopy[1], secretCopy[2]] : [activeSecret === 'mel' ? secretCopy[4] : secretCopy[3]];
     for (const line of lines) { const paragraph = document.createElement('p'); paragraph.textContent = line; body.append(paragraph); }
@@ -145,7 +165,7 @@ export function installHomeMenu({ canvas, stage, config = {} } = {}) {
   }
   function revealSecret(kind, focus = false) {
     if (!visible || loadingMode || !state.ready || state.busy) return;
-    closeSecret(); closeLanguage(); activeSecret = kind; secretReturnFocus = $(`[data-secret="${kind}"]`);
+    closeSecret(); closeLanguage(); closeMode(); activeSecret = kind; root.dataset.secret = kind; secretReturnFocus = $(`[data-secret="${kind}"]`);
     fillSecret(); secretPanel.hidden = false;
     if (kind === 'reflection') {
       drawReflection(); root.classList.remove('julia-home--reflection-fading');
@@ -191,8 +211,10 @@ export function installHomeMenu({ canvas, stage, config = {} } = {}) {
     root.dataset.portraitReady = String(portraitReady);
     root.dataset.layout = portrait ? 'portrait' : 'landscape';
     if (portrait) {
-      world.style.width = `${rect.width}px`; world.style.height = `${rect.height}px`;
-      world.style.left = '0px'; world.style.top = '0px';
+      const scale = Math.max(rect.width / 852, rect.height / 1846);
+      const width = 852 * scale, height = 1846 * scale;
+      world.style.width = `${width}px`; world.style.height = `${height}px`;
+      world.style.left = `${(rect.width - width) / 2}px`; world.style.top = `${(rect.height - height) / 2}px`;
     } else {
       const scale = Math.max((rect.width + 16) / 1672, (rect.height + 16) / 941);
       const width = 1672 * scale, height = 941 * scale;
@@ -203,30 +225,27 @@ export function installHomeMenu({ canvas, stage, config = {} } = {}) {
     const layoutName = portrait ? 'portrait' : 'desktop';
     const geometry = { ...GEOMETRY[layoutName], ...(config.geometry?.[layoutName] || {}) };
     const placement = { ...GEOMETRY[layoutName].actor, ...(geometry.actor || {}) };
-    if (portrait && rect.height < 700) placement.bottom = Math.min(placement.bottom, .58);
     if (portrait) {
-      const controlsRect = $('.julia-home__controls').getBoundingClientRect();
-      const firstVisible = [...menu.querySelectorAll('.julia-home__item')].find(button => {
-        if (button.hidden) return false;
-        const box = button.getBoundingClientRect();
-        return box.height > 0 && box.bottom > controlsRect.top && box.top < controlsRect.bottom;
-      });
-      if (firstVisible) {
-        const worldTop = world.getBoundingClientRect().top;
-        const menuBottomLimit = (firstVisible.getBoundingClientRect().top - 10 - worldTop) / sceneHeight;
-        placement.bottom = Math.min(placement.bottom, Math.max(placement.top, menuBottomLimit));
-      }
+      // The hand and the sill share artwork coordinates. Menu height must
+      // never rescale Julia independently of the street perspective.
+      const scale = sceneWidth / 852, characterScale = placement.scale * scale;
+      actorCanvas.style.width = `${actorCanvas.width * characterScale}px`;
+      actorCanvas.style.height = `${actorCanvas.height * characterScale}px`;
+      actorCanvas.style.left = `${placement.sill[0] * scale - placement.hand[0] * characterScale}px`;
+      actorCanvas.style.top = `${placement.sill[1] * scale - placement.hand[1] * characterScale}px`;
     } else if (rect.height <= 580) {
       const worldTop = world.getBoundingClientRect().top;
       const safeBottomLimit = ($('.julia-home__date').getBoundingClientRect().bottom - 10 - worldTop) / sceneHeight;
       placement.bottom = Math.min(placement.bottom, Math.max(placement.top, safeBottomLimit));
     }
-    const snapshot = actor?.snapshot();
-    const bounds = snapshot?.contentBounds || [0, 0, actorCanvas.width, actorCanvas.height];
-    const scale = Math.min(sceneWidth * placement.maxWidth / bounds[2], sceneHeight * (placement.bottom - placement.top) / bounds[3]);
-    actorCanvas.style.width = `${actorCanvas.width * scale}px`; actorCanvas.style.height = `${actorCanvas.height * scale}px`;
-    actorCanvas.style.left = `${sceneWidth * placement.centerX - (bounds[0] + bounds[2] / 2) * scale}px`;
-    actorCanvas.style.top = `${sceneHeight * placement.top - bounds[1] * scale}px`;
+    if (!portrait) {
+      const snapshot = actor?.snapshot();
+      const bounds = snapshot?.contentBounds || [0, 0, actorCanvas.width, actorCanvas.height];
+      const scale = Math.min(sceneWidth * placement.maxWidth / bounds[2], sceneHeight * (placement.bottom - placement.top) / bounds[3]);
+      actorCanvas.style.width = `${actorCanvas.width * scale}px`; actorCanvas.style.height = `${actorCanvas.height * scale}px`;
+      actorCanvas.style.left = `${sceneWidth * placement.centerX - (bounds[0] + bounds[2] / 2) * scale}px`;
+      actorCanvas.style.top = `${sceneHeight * placement.top - bounds[1] * scale}px`;
+    }
     for (const kind of ['reflection', 'mel']) {
       const box = geometry[kind], target = $(`[data-secret="${kind}"]`);
       target.style.left = `${box.x * 100}%`; target.style.top = `${box.y * 100}%`;
@@ -272,6 +291,8 @@ export function installHomeMenu({ canvas, stage, config = {} } = {}) {
     $('[data-action="fullscreen"]').setAttribute('aria-pressed', String(!!state.fullscreen));
     $('[data-action="fullscreen"]').setAttribute('aria-label', strings.fullscreen);
     $('[data-action="fullscreen"]').title = strings.fullscreen;
+    $('[data-current-edition]').textContent = strings[state.edition === 'legacy' ? 'legacy' : 'modern'];
+    modeToggle.setAttribute('aria-label', `${strings.edition}: ${$('[data-current-edition]').textContent}`);
     $('.julia-home__date').textContent = secretCopy[0];
     $('[data-secret="reflection"]').setAttribute('aria-label', secretCopy[5]); $('[data-secret="reflection"]').title = secretCopy[5];
     $('[data-secret="mel"]').setAttribute('aria-label', secretCopy[6]); $('[data-secret="mel"]').title = secretCopy[6];
@@ -295,7 +316,7 @@ export function installHomeMenu({ canvas, stage, config = {} } = {}) {
       } else {
         root.classList.remove('julia-home--entered');
         for (const timer of timers.values()) clearTimeout(timer); timers.clear();
-        closeLanguage(); closeSecret(); resetScene(); setMood('idle');
+        closeLanguage(); closeSecret(); closeMode(); resetScene(); setMood('idle');
         if (returnNativeFocus) canvas.focus({ preventScroll: true });
       }
     }
@@ -318,6 +339,9 @@ export function installHomeMenu({ canvas, stage, config = {} } = {}) {
     root.style.setProperty('--home-y', `${clamp((event.clientY - rect.top - rect.height / 2) / rect.height * 8, -4, 4).toFixed(2)}px`);
   }
   root.addEventListener('pointermove', onPointer);
+  root.addEventListener('pointerdown', event => {
+    if (modeOpen && !event.target.closest('.julia-home__tools')) closeMode();
+  });
   root.addEventListener('animationend', event => {
     if (visible && root.dataset.layout === 'portrait' && event.animationName === 'street-arrive' && event.target.matches('.julia-home__item')) layoutScene();
   });
@@ -325,9 +349,18 @@ export function installHomeMenu({ canvas, stage, config = {} } = {}) {
   root.querySelectorAll('.julia-home__item').forEach(button => {
     button.addEventListener('pointerenter', () => selectItem(button)); button.addEventListener('focus', () => selectItem(button));
   });
-  root.querySelectorAll('[data-action]').forEach(button => button.addEventListener('click', () => dispatch(button.dataset.action, button.dataset.value)));
+  root.querySelectorAll('[data-action]').forEach(button => button.addEventListener('click', () => {
+    if (dispatch(button.dataset.action, button.dataset.value)) closeMode();
+  }));
+  modeToggle.addEventListener('click', () => {
+    if (modeToggle.disabled) return;
+    modeOpen = !modeOpen; root.dataset.modeOpen = String(modeOpen);
+    modeToggle.setAttribute('aria-expanded', String(modeOpen));
+    if (modeOpen) { closeLanguage(); closeSecret(); }
+  });
   languageButton.addEventListener('click', () => {
     if (languageButton.disabled) return;
+    closeMode();
     const open = languagePanel.hidden; languagePanel.hidden = !open; languageButton.setAttribute('aria-expanded', String(open));
     if (open) languagePicker.focus();
   });
@@ -343,7 +376,7 @@ export function installHomeMenu({ canvas, stage, config = {} } = {}) {
     if (!visible || event.ctrlKey || event.metaKey || event.altKey) return;
     event.stopPropagation();
     if (event.key === 'Escape') {
-      event.preventDefault(); closeSecret(true); closeLanguage(true); resetScene(); setMood('idle'); return;
+      event.preventDefault(); closeSecret(true); closeLanguage(true); closeMode(true); resetScene(); setMood('idle'); return;
     }
     if (event.target === languagePicker) return;
     const buttons = [...menu.querySelectorAll('.julia-home__item')].filter(button => !button.hidden && !button.disabled);

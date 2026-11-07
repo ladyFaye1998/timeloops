@@ -17,7 +17,7 @@ installAudioUnlock();
 // prevent the original game's automatic startup or native menu fallback.
 const homeConfig = document.getElementById('home-config');
 if (homeConfig) {
-  void import('./home.134c538556670e4de9a499fe4715c4b67679c104a13e83b23fea1047bdbc3d67.mjs').then(({ installHomeMenu }) => {
+  void import('./home.ef71fe6c4f993c1703d278edf9948ad0938226be7e65fd98a884db144bd9f5bc.mjs').then(({ installHomeMenu }) => {
     const home = installHomeMenu({ canvas, stage, config: JSON.parse(homeConfig.textContent) });
     return home?.ready;
   }).catch(error => console.warn('Animated home unavailable; native menu remains available:', error?.message || String(error)));
