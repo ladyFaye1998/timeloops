@@ -99,11 +99,13 @@ export function installHomeMenu({ canvas, stage, config = {} } = {}) {
   const errors = [];
   let state = { ready: false, visible: false, busy: false, hasSave: false, edition: 'modern', locale: globalThis.__juliaLanguage || 'en', strings: {} };
   let actor;
+  let characterReady = false;
   let assetsReady = false;
   let destroyed = false;
   let failed = false;
   let visible = false;
   let loadingMode = false;
+  let backgroundReady = backgroundMode === 'graphic';
   let portraitReady = false;
   let activeSecret = '';
   let modeOpen = false;
@@ -254,6 +256,10 @@ export function installHomeMenu({ canvas, stage, config = {} } = {}) {
   }
   function render() {
     if (destroyed) return;
+    // Only the plate used by the current viewport can hold up the home.
+    // The other orientation may still be downloading on a slow connection.
+    const needsPortrait = window.innerHeight > window.innerWidth && !!assets.backgroundPortrait;
+    assetsReady = characterReady && (backgroundMode === 'graphic' || (needsPortrait ? portraitReady : backgroundReady));
     copy = COPY[state.locale] || COPY.en;
     secretCopy = SECRETS[state.locale] || SECRETS.en;
     const bodyState = document.body.dataset.state;
@@ -331,7 +337,7 @@ export function installHomeMenu({ canvas, stage, config = {} } = {}) {
     state = { ...state, ...next, strings: { ...state.strings, ...(next.strings || {}) } }; render();
   }
   function onNative(event) { update(event.detail || globalThis.juliaHomeState); }
-  function onResize() { if (visible) { layoutScene(); selectItem(menu.querySelector('.is-selected') || $('[data-action="new_game"]'), false); } }
+  function onResize() { render(); if (visible) { layoutScene(); selectItem(menu.querySelector('.is-selected') || $('[data-action="new_game"]'), false); } }
   function onPointer(event) {
     if (!visible || reduced() || event.pointerType === 'touch') return;
     const rect = root.getBoundingClientRect();
@@ -396,7 +402,7 @@ export function installHomeMenu({ canvas, stage, config = {} } = {}) {
   document.addEventListener('visibilitychange', render); motion.addEventListener('change', render);
 
   function snapshot() {
-    return Object.freeze({ ready: assetsReady, visible, loading: loadingMode, bridgeReady: !!state.ready && typeof globalThis.juliaHomeBridge?.dispatch === 'function', locale: state.locale, edition: state.edition, hasSave: !!state.hasSave, reducedMotion: reduced(), backgroundMode, portraitReady, activeSecret, reflectionDraws, layout: root.dataset.layout, lastAction, selectedAction, audioPlaying: false, actor: actor?.snapshot() || null, errors: [...errors] });
+    return Object.freeze({ ready: assetsReady, visible, loading: loadingMode, bridgeReady: !!state.ready && typeof globalThis.juliaHomeBridge?.dispatch === 'function', locale: state.locale, edition: state.edition, hasSave: !!state.hasSave, reducedMotion: reduced(), backgroundMode, backgroundReady, portraitReady, activeSecret, reflectionDraws, layout: root.dataset.layout, lastAction, selectedAction, audioPlaying: false, actor: actor?.snapshot() || null, errors: [...errors] });
   }
   const controller = {
     ready: null, update, snapshot,
@@ -416,12 +422,21 @@ export function installHomeMenu({ canvas, stage, config = {} } = {}) {
   controller.ready = (async () => {
     try {
       actor = createStreetActor(actorCanvas, { assets, reducedMotion: reduced(), registration: config.registration || REGISTRATION, onDraw: drawReflection }); actor.setVisible(false);
-      const background = backgroundMode === 'image' && assets.background ? imageReady($('.julia-home__background'), assets.background) : Promise.resolve(true);
-      const portrait = backgroundMode === 'image' && assets.backgroundPortrait ? imageReady($('.julia-home__portrait-background'), assets.backgroundPortrait).then(() => { portraitReady = true; }).catch(() => { errors.push('Portrait background unavailable; using home fallback'); }) : Promise.resolve();
-      const results = await Promise.all([background, actor.ready, portrait]);
+      const background = backgroundMode === 'image' && assets.background ? imageReady($('.julia-home__background'), assets.background).then(() => {
+        backgroundReady = true; render(); return true;
+      }).catch(() => { errors.push('Desktop background unavailable; using home fallback'); render(); return false; }) : Promise.resolve(true);
+      const portrait = backgroundMode === 'image' && assets.backgroundPortrait ? imageReady($('.julia-home__portrait-background'), assets.backgroundPortrait).then(() => {
+        portraitReady = true; render(); return true;
+      }).catch(() => { errors.push('Portrait background unavailable; using home fallback'); render(); return false; }) : Promise.resolve(true);
+      const character = actor.ready.then(ready => {
+        if (ready && !destroyed) { characterReady = true; update(globalThis.juliaHomeState); render(); }
+        return ready;
+      });
+      const requiredBackground = window.innerHeight > window.innerWidth && assets.backgroundPortrait ? portrait : background;
+      const results = await Promise.all([requiredBackground, character]);
       if (destroyed) return false;
       if (results[1] === false || !actor.snapshot().ready) throw new Error('Home character unavailable');
-      assetsReady = true; update(globalThis.juliaHomeState); render(); return true;
+      update(globalThis.juliaHomeState); render(); return results[0];
     } catch (error) {
       if (!destroyed) { errors.push(String(error?.message || error)); failed = true; actor?.setVisible(false); render(); }
       return false;

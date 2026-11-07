@@ -1,8 +1,8 @@
 {
   "schema": "julia-web-chunks-v1",
-  "commit": "778d571df47fd34ed7fadf8bac748bc682b23fe7",
+  "commit": "c48070b942f4f7ecdba0a84048aa2b830a8fdd37",
   "files": {
-    "engine/778d571df47fd34ed7fadf8bac748bc682b23fe7/index.wasm": {
+    "engine/c48070b942f4f7ecdba0a84048aa2b830a8fdd37/index.wasm": {
       "bytes": 39513091,
       "sha256": "35116f68540ac41acf7d71ea457added91b5e960a9cca3e2acc72918eaf01277",
       "chunks": [
@@ -19,7 +19,7 @@
       ],
       "mime": "application/wasm"
     },
-    "engine/778d571df47fd34ed7fadf8bac748bc682b23fe7/index.pck": {
+    "engine/c48070b942f4f7ecdba0a84048aa2b830a8fdd37/index.pck": {
       "bytes": 937081116,
       "sha256": "9b0f732738b14e153659afec5cd12ef5e6b3fea9597c0f37af85537b2e7e329e",
       "chunks": [

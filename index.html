@@ -11,6 +11,7 @@
   <link rel="apple-touch-icon" sizes="180x180" href="touch-icon.fca8d649b169fe08a74e50943a3b696d268728a7121f96445e369dd749bdbb5b.png">
   <link rel="preload" href="menu-art.884a1e57454db7db65adc6570e28a0bfd7db197445889f472828aac5a9943db9.png" as="image" media="(orientation: landscape)" fetchpriority="high">
   <link rel="preload" href="home-backgroundPortrait.653e6b5e00f9cd8000ae86e4e2b1aee4d2959b21e13c42fd1d8fa841b417c381.png" as="image" media="(orientation: portrait)" fetchpriority="high">
+  <link rel="preload" href="home-loadingJulia.5bd914610fa0f2629bc7036a8b78c36b10c56b45f74ef97052fe057d0d1705d3.png" as="image" fetchpriority="high">
   <style>
     @font-face { font-family: JuliaDisplay; src: url('menu-font.2ba02e68b152868aef9ba28e24b3648c7d457fe6f25c761f2c2c53fb61a73fc8.ttf') format('truetype'); font-weight: 300 700; font-display: swap; }
     @font-face { font-family: Caveat; src: url('home-fontHand.0bdb6b660482d31531b3945849fba5916b3ef8695da7024a9e6b9ee3c4157988.ttf') format('truetype'); font-weight: 400 700; font-display: swap; }
@@ -21,6 +22,7 @@
     body { height: 100dvh; }
     #language-bar { height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 2px 12px; background: #fff9ec; border-bottom: 1px solid #b79b6959; }
     #language-bar strong { font-size: 19px; color: #b82e60; }
+    body[data-state="loading"] #language-bar { visibility: hidden; }
     #language-bar label { display: flex; align-items: center; gap: 8px; font-size: 15px; }
     #game-language { min-width: 140px; min-height: 44px; max-width: 55vw; border: 1px solid #98713e80; border-radius: 11px; padding: 4px 10px; background: #fffdf5; color: #432c20; font: inherit; }
     #game-language:focus-visible { outline: 2px solid #267c78; outline-offset: 1px; }
@@ -29,10 +31,11 @@
     #stage:fullscreen { width: 100vw; height: 100dvh; background: #000; }
     #stage:-webkit-full-screen { width: 100vw; height: 100vh; background: #000; }
     canvas { display: block; width: 100%; height: 100%; background: #faf3df; touch-action: none; outline: none; }
-    #loading { position: absolute; inset: 0; isolation: isolate; overflow: hidden; background: #111722; }
-    #loading::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, #0b13256e, transparent 50%); pointer-events: none; }
+    #loading { position: fixed; inset: 0; z-index: 30; isolation: isolate; overflow: clip; background: #111722; }
+    #loading::after { content: ''; position: absolute; z-index: 2; inset: 0; background: linear-gradient(90deg, #0b13256e, transparent 50%); pointer-events: none; }
     .menu-art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; }
-    .intro { position: absolute; z-index: 1; left: clamp(24px, 7vw, 110px); top: 12%; bottom: 12%; width: min(380px, 32%); display: flex; flex-direction: column; justify-content: space-between; gap: 28px; overflow-y: auto; overscroll-behavior: contain; padding: 0 6px 6px; text-align: start; }
+    #loading-julia { position: absolute; z-index: 1; width: 32%; height: auto; left: 56%; top: 36%; max-width: none; object-fit: contain; pointer-events: none; }
+    .intro { position: absolute; z-index: 3; left: clamp(24px, 7vw, 110px); top: 12%; bottom: 12%; width: min(380px, 32%); display: flex; flex-direction: column; justify-content: space-between; gap: 28px; overflow-y: auto; overscroll-behavior: contain; padding: 0 6px 6px; text-align: start; }
     .intro-heading, .loading-block { flex-shrink: 0; }
     h1 { font-family: Georgia, JuliaDisplay, serif; font-style: italic; font-size: clamp(60px, 7vw, 104px); font-weight: 700; line-height: 1.1; letter-spacing: -.025em; margin: 0; color: #fff0c4; text-shadow: 0 2px 12px #11172288; }
     .subtitle { font-size: clamp(16px, 1.65vw, 21px); line-height: 1.5; margin: 13px 0 0; color: #fff0c4; }
@@ -52,6 +55,7 @@
     @media (orientation: portrait) {
       #loading::after { background: linear-gradient(180deg, #1117223d, transparent 35%, #111722bb 100%); }
       .menu-art { height: 100%; object-fit: cover; object-position: center; }
+      #loading-julia { width: 60%; left: 36.5%; top: 31.8%; }
       .intro { left: max(24px, env(safe-area-inset-left)); right: max(24px, env(safe-area-inset-right)); top: max(24px, env(safe-area-inset-top)); bottom: max(36px, env(safe-area-inset-bottom)); width: auto; gap: 24px; text-align: center; }
       h1 { font-size: clamp(50px, 16vw, 68px); }
       .subtitle { font-size: 17px; margin-top: 8px; }
@@ -85,6 +89,7 @@
     <canvas id="canvas" tabindex="0" aria-label="Julia Flower Girl game">הדפדפן הזה אינו תומך במשחק.</canvas>
     <section id="loading" aria-label="טעינת המשחק">
       <picture aria-hidden="true"><source media="(orientation: portrait)" srcset="home-backgroundPortrait.653e6b5e00f9cd8000ae86e4e2b1aee4d2959b21e13c42fd1d8fa841b417c381.png"><img class="menu-art" src="menu-art.884a1e57454db7db65adc6570e28a0bfd7db197445889f472828aac5a9943db9.png" alt="" fetchpriority="high" onerror="this.onerror=null;this.parentElement.querySelector('source')?.remove();this.src='menu-art.884a1e57454db7db65adc6570e28a0bfd7db197445889f472828aac5a9943db9.png'"></picture>
+      <img id="loading-julia" src="home-loadingJulia.5bd914610fa0f2629bc7036a8b78c36b10c56b45f74ef97052fe057d0d1705d3.png" width="543" height="724" alt="" aria-hidden="true" fetchpriority="high" decoding="async">
       <div class="intro">
         <div class="intro-heading">
           <h1 id="loading-title">ג׳וליה</h1>
@@ -105,9 +110,9 @@
     </section>
   </main>
   <noscript>כדי לשחק יש לאפשר JavaScript בדפדפן.</noscript>
-  <script id="game-config" type="application/json">{"args":[],"canvasResizePolicy":0,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"engine/778d571df47fd34ed7fadf8bac748bc682b23fe7/index","experimentalVK":true,"fileSizes":{"engine/778d571df47fd34ed7fadf8bac748bc682b23fe7/index.wasm":39513091,"engine/778d571df47fd34ed7fadf8bac748bc682b23fe7/index.pck":937081116},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4,"mainPack":"engine/778d571df47fd34ed7fadf8bac748bc682b23fe7/index.pck","serviceWorker":"","persistentPaths":["/userfs"]}</script>
-  <script id="web-config" type="application/json">{"commit":"778d571df47fd34ed7fadf8bac748bc682b23fe7","engine":"engine/778d571df47fd34ed7fadf8bac748bc682b23fe7/index.js","manifest":"game-manifest.d05c7aca9df8b2a0d28b86468ce943015288689a3f973182e954b447da21089a.json","total_bytes":976594207}</script>
-  <script id="home-config" type="application/json">{"backgroundMode":"image","assets":{"background":"menu-art.884a1e57454db7db65adc6570e28a0bfd7db197445889f472828aac5a9943db9.png","backgroundPortrait":"home-backgroundPortrait.653e6b5e00f9cd8000ae86e4e2b1aee4d2959b21e13c42fd1d8fa841b417c381.png","standingAtlas":"home-standingAtlas.1fea26bcec17e503d060c36b780af0833b5794ed9eedccc8ed88c39e744f2c39.png","mel":"home-mel.28301092744013c2d3b5cfbd6b7a115ca06004a6e377e831bbdb8479a1cc463d.png","fontHand":"home-fontHand.0bdb6b660482d31531b3945849fba5916b3ef8695da7024a9e6b9ee3c4157988.ttf","fontBody":"home-fontBody.bfb7bb691513f12e734dc346c03a03f784912432d7e3fa8e56efcf906fe86b3d.ttf"},"registration":{"head":[180,3,153,138],"eyes":[239,52,73,39],"offsets":{"1":[30,1],"2":[0,0],"3":[30,1]},"feather":2,"neckFade":[119,141]}}</script>
-  <script type="module" src="player.56b20e1a1dbc5d02449a9af6dde270c8b989b08de436fa9fe87c1d5c78f0b7b2.mjs"></script>
+  <script id="game-config" type="application/json">{"args":[],"canvasResizePolicy":0,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"engine/c48070b942f4f7ecdba0a84048aa2b830a8fdd37/index","experimentalVK":true,"fileSizes":{"engine/c48070b942f4f7ecdba0a84048aa2b830a8fdd37/index.wasm":39513091,"engine/c48070b942f4f7ecdba0a84048aa2b830a8fdd37/index.pck":937081116},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4,"mainPack":"engine/c48070b942f4f7ecdba0a84048aa2b830a8fdd37/index.pck","serviceWorker":"","persistentPaths":["/userfs"]}</script>
+  <script id="web-config" type="application/json">{"commit":"c48070b942f4f7ecdba0a84048aa2b830a8fdd37","engine":"engine/c48070b942f4f7ecdba0a84048aa2b830a8fdd37/index.js","manifest":"game-manifest.1778310001d382cd3787795048df30723cc1bb1aa4b587cff15a6cfbf0a0c3a6.json","total_bytes":976594207}</script>
+  <script id="home-config" type="application/json">{"backgroundMode":"image","assets":{"background":"menu-art.884a1e57454db7db65adc6570e28a0bfd7db197445889f472828aac5a9943db9.png","backgroundPortrait":"home-backgroundPortrait.653e6b5e00f9cd8000ae86e4e2b1aee4d2959b21e13c42fd1d8fa841b417c381.png","standingAtlas":"home-standingAtlas.1fea26bcec17e503d060c36b780af0833b5794ed9eedccc8ed88c39e744f2c39.png","loadingJulia":"home-loadingJulia.5bd914610fa0f2629bc7036a8b78c36b10c56b45f74ef97052fe057d0d1705d3.png","mel":"home-mel.28301092744013c2d3b5cfbd6b7a115ca06004a6e377e831bbdb8479a1cc463d.png","fontHand":"home-fontHand.0bdb6b660482d31531b3945849fba5916b3ef8695da7024a9e6b9ee3c4157988.ttf","fontBody":"home-fontBody.bfb7bb691513f12e734dc346c03a03f784912432d7e3fa8e56efcf906fe86b3d.ttf"},"registration":{"head":[180,3,153,138],"eyes":[239,52,73,39],"offsets":{"1":[30,1],"2":[0,0],"3":[30,1]},"feather":2,"neckFade":[119,141]}}</script>
+  <script type="module" src="player.0bfab6c70ba6f9247234ba408c7837167c86ff62b599e354359c2b7068a5d186.mjs"></script>
 </body>
 </html>

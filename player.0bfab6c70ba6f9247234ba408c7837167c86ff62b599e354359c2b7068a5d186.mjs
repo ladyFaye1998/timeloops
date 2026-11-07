@@ -7,6 +7,7 @@ const boot = JSON.parse(document.getElementById('web-config').textContent);
 const canvas = document.getElementById('canvas');
 const stage = document.getElementById('stage');
 const loading = document.getElementById('loading');
+const loadingJulia = document.getElementById('loading-julia');
 const status = document.getElementById('status');
 const progress = document.getElementById('progress');
 const retry = document.getElementById('retry');
@@ -17,10 +18,26 @@ installAudioUnlock();
 // prevent the original game's automatic startup or native menu fallback.
 const homeConfig = document.getElementById('home-config');
 if (homeConfig) {
-  void import('./home.ef71fe6c4f993c1703d278edf9948ad0938226be7e65fd98a884db144bd9f5bc.mjs').then(({ installHomeMenu }) => {
+  void import('./home.3e4f8aa5fd00709badf8856c2e4ba6391363b6bca7e038e5d9001c372630c8d4.mjs').then(({ installHomeMenu }) => {
     const home = installHomeMenu({ canvas, stage, config: JSON.parse(homeConfig.textContent) });
     return home?.ready;
   }).catch(error => console.warn('Animated home unavailable; native menu remains available:', error?.message || String(error)));
+}
+
+function layoutLoadingJulia() {
+  if (!loadingJulia?.style || loading.hidden || typeof loading.getBoundingClientRect !== 'function') return;
+  const rect = loading.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const portrait = rect.height > rect.width;
+  const plateWidth = portrait ? 852 : 1672, plateHeight = portrait ? 1846 : 941;
+  const coverScale = Math.max(rect.width / plateWidth, rect.height / plateHeight);
+  const worldWidth = plateWidth * coverScale, worldHeight = plateHeight * coverScale;
+  const worldX = (rect.width - worldWidth) / 2, worldY = (rect.height - worldHeight) / 2;
+  const characterScale = portrait ? .94 * coverScale : Math.min(worldWidth * .30 / 264, worldHeight * (.925 - .36) / 706);
+  loadingJulia.style.width = `${543 * characterScale}px`;
+  loadingJulia.style.height = `${724 * characterScale}px`;
+  loadingJulia.style.left = `${portrait ? worldX + 690 * coverScale - 403 * characterScale : worldX + worldWidth * .68 - (156 + 264 / 2) * characterScale}px`;
+  loadingJulia.style.top = `${portrait ? worldY + 922 * coverScale - 356 * characterScale : worldY + worldHeight * .36 - 10 * characterScale}px`;
 }
 
 function resizeCanvas() {
@@ -30,7 +47,9 @@ function resizeCanvas() {
   const height = Math.max(1, Math.round(rect.height * ratio));
   if (canvas.width !== width) canvas.width = width;
   if (canvas.height !== height) canvas.height = height;
+  layoutLoadingJulia();
 }
+loadingJulia?.addEventListener?.('load', layoutLoadingJulia);
 new ResizeObserver(resizeCanvas).observe(stage);
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
@@ -40,6 +59,7 @@ function showError(error) {
   failed = true;
   loading.hidden = false;
   document.body.dataset.state = 'error';
+  layoutLoadingJulia();
   language.showStatus('error');
   console.warn('Game startup failed:', error?.message || String(error));
   retry.hidden = false;
