@@ -122770,6 +122770,12 @@ const WARM_SHADOW: Color = Color(0.15, 0.07, 0.035, 0.36)
 
 var _locale: String = JuliaLocalizedCopy.DEFAULT_LOCALE
 var _web_language_callback: JavaScriptObject
+var _web_home_callback: JavaScriptObject
+var _web_home_owner: String = ""
+var _web_home_last_state: String = ""
+var _web_home_publish_queued: bool = false
+var _web_home_has_save: bool = false
+var _web_home_audio_levels: Dictionary = {}
 var _presentation_edition: String = "modern"
 var _original_menu: JuliaOriginalMenu
 var _edition_return_button: Button
@@ -122919,6 +122925,123 @@ func _ready() -> void:
 		call_deferred("_run_windows_release_validation")
 	if OS.is_debug_build() and (OS.has_feature("android") or "--validate-story" in OS.get_cmdline_user_args()) and FileAccess.file_exists("user://route-validation-request.json"):
 		call_deferred("_run_device_story_validation")
+	if OS.has_feature("web"):
+		call_deferred("_install_web_home_bridge")
+
+
+func _install_web_home_bridge() -> void:
+	if not OS.has_feature("web") or not is_node_ready():
+		return
+	_web_home_owner = str(get_instance_id())
+	_web_home_callback = JavaScriptBridge.create_callback(_on_web_home_action)
+	JavaScriptBridge.eval("window.juliaHomeBridge = {version:1,owner:" + JSON.stringify(_web_home_owner) + "};", true)
+	var browser_window: JavaScriptObject = JavaScriptBridge.get_interface("window")
+	var bridge: JavaScriptObject = browser_window.juliaHomeBridge
+	bridge.dispatch = _web_home_callback
+	_settings_overlay.visibility_changed.connect(_refresh_web_home_audio_levels)
+	_opening_sequence.visibility_changed.connect(_queue_web_home_state)
+	_refresh_web_home_audio_levels()
+	_publish_web_home_state()
+
+
+func _web_home_snapshot() -> Dictionary:
+	var settings_open: bool = is_instance_valid(_settings_overlay) and _settings_overlay.visible
+	var opening: bool = is_instance_valid(_opening_sequence) and _opening_sequence.is_playing()
+	var busy: bool = _transitioning or _edition_transitioning or opening
+	return {
+		"version": 1, "owner": _web_home_owner, "ready": is_node_ready(),
+		"visible": _view_mode == ViewMode.MAIN_MENU and _presentation_edition == "modern" and not settings_open and not busy,
+		"busy": busy, "hasSave": _web_home_has_save,
+		"edition": _presentation_edition, "locale": _locale, "rtl": _locale == "he",
+		"reducedMotion": _reduced_motion, "highContrast": _high_contrast,
+		"largeText": _large_text, "fullscreen": _is_fullscreen(),
+		"audio": _web_home_audio_snapshot(),
+		"strings": {
+			"title": _copy("menu_title"), "subtitle": _copy("menu_subtitle"),
+			"newGame": _copy("start"), "continue": _copy("continue_game"),
+			"settings": _copy("settings"), "language": _copy("language_button"),
+			"edition": JuliaGameLocalization.text("Edition", _locale),
+			"modern": JuliaGameLocalization.text("Modern", _locale),
+			"legacy": JuliaGameLocalization.text("Legacy", _locale),
+			"fullscreen": _copy("windowed") if _is_fullscreen() else _copy("fullscreen"),
+		},
+	}
+
+
+func _web_home_audio_snapshot() -> Dictionary:
+	var result: Dictionary = {"masterVolume": _master_volume}
+	var master_bus: int = AudioServer.get_bus_index("Master")
+	result["masterMuted"] = _master_volume <= 0.001 or (master_bus >= 0 and AudioServer.is_bus_mute(master_bus))
+	for category: String in ["music", "voice", "effects"]:
+		var volume: float = float(_web_home_audio_levels.get(category, 1.0))
+		var bus: int = AudioServer.get_bus_index(str(AudioPreferences.BUSES[category]))
+		result[category + "Volume"] = volume
+		result[category + "Muted"] = volume <= 0.0 or (bus >= 0 and AudioServer.is_bus_mute(bus))
+	return result
+
+
+func _refresh_web_home_audio_levels() -> void:
+	_web_home_audio_levels = AudioPreferences.load_levels()
+	_queue_web_home_state()
+
+
+func _queue_web_home_state() -> void:
+	if not OS.has_feature("web") or _web_home_owner.is_empty() or _web_home_publish_queued:
+		return
+	_web_home_publish_queued = true
+	call_deferred("_publish_web_home_state")
+
+
+func _publish_web_home_state() -> void:
+	_web_home_publish_queued = false
+	if not OS.has_feature("web") or _web_home_owner.is_empty() or not is_node_ready():
+		return
+	var encoded: String = JSON.stringify(_web_home_snapshot())
+	if encoded == _web_home_last_state:
+		return
+	_web_home_last_state = encoded
+	JavaScriptBridge.eval("if(window.juliaHomeBridge && window.juliaHomeBridge.owner === " + JSON.stringify(_web_home_owner) + ") { window.juliaHomeState = " + encoded + "; window.dispatchEvent(new CustomEvent('julia-home-state',{detail:window.juliaHomeState})); }", true)
+
+
+func _on_web_home_action(arguments: Array) -> void:
+	if not OS.has_feature("web") or _web_home_owner.is_empty() or arguments.is_empty() or not arguments[0] is String:
+		return
+	if not bool(JavaScriptBridge.eval("!!window.juliaHomeBridge && window.juliaHomeBridge.owner === " + JSON.stringify(_web_home_owner), true)):
+		return
+	# The optional DOM home routes only the same actions as the native menu.
+	# Run in the original gesture callback so browser audio/fullscreen activation
+	# is retained; no timer or deferred call stands between click and action.
+	if not bool(_web_home_snapshot().visible):
+		return
+	match str(arguments[0]):
+		"new_game": _start_first_scene()
+		"continue": _continue_game()
+		"settings": _open_settings()
+		"language":
+			if arguments.size() > 1:
+				if not arguments[1] is String or str(arguments[1]) not in JuliaGameLocalization.CODES:
+					return
+				_on_web_language([{"detail": str(arguments[1])}])
+			else:
+				_toggle_locale()
+		"edition":
+			if arguments.size() < 2 or not arguments[1] is String or str(arguments[1]) not in ["modern", "legacy"]:
+				return
+			_select_edition(str(arguments[1]))
+		"fullscreen": _toggle_fullscreen()
+		_: return
+	_publish_web_home_state()
+
+
+func _exit_tree() -> void:
+	if not OS.has_feature("web"):
+		return
+	if not _web_home_owner.is_empty():
+		JavaScriptBridge.eval("if(window.juliaHomeBridge && window.juliaHomeBridge.owner === " + JSON.stringify(_web_home_owner) + ") { delete window.juliaHomeBridge; window.juliaHomeState = {version:1,owner:" + JSON.stringify(_web_home_owner) + ",ready:false,visible:false,busy:true}; window.dispatchEvent(new CustomEvent('julia-home-state',{detail:window.juliaHomeState})); }", true)
+	if _web_language_callback != null:
+		JavaScriptBridge.get_interface("window").removeEventListener("julia-language-change", _web_language_callback)
+	_web_home_callback = null
+	_web_home_owner = ""
 
 
 func _run_device_story_validation() -> void:
@@ -123960,6 +124083,7 @@ func _rebuild_side_content() -> void:
 		_build_menu_content()
 	elif _view_mode == ViewMode.FIRST_SCENE:
 		_build_scene_content()
+	_queue_web_home_state()
 
 
 func _build_menu_content() -> void:
@@ -123997,6 +124121,7 @@ func _build_menu_content() -> void:
 	_side_content.add_child(flex)
 
 	var resume_slot: String = _best_resume_slot()
+	_web_home_has_save = not resume_slot.is_empty()
 	if not resume_slot.is_empty():
 		var continue_button: Button = _make_menu_action_button(
 			_copy("continue_game"), true
@@ -124671,6 +124796,7 @@ func _transition_from_opening_to_adventure() -> void:
 	if _transitioning:
 		return
 	_transitioning = true
+	_queue_web_home_state()
 	_transition_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 
 	# The opening hides itself immediately before it emits finished/skipped.
@@ -124688,6 +124814,7 @@ func _transition_from_opening_to_adventure() -> void:
 		_transition_overlay.color.a = 0.0
 		_transition_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_transitioning = false
+		_queue_web_home_state()
 		_update_casebook_access()
 		return
 
@@ -124700,6 +124827,7 @@ func _transition_from_opening_to_adventure() -> void:
 	await fade_in.finished
 	_transition_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_transitioning = false
+	_queue_web_home_state()
 	_update_casebook_access()
 
 
@@ -124711,9 +124839,11 @@ func _transition_to(target: ViewMode) -> void:
 	if _transitioning or target == _view_mode:
 		return
 	_transitioning = true
+	_queue_web_home_state()
 	if _reduced_motion:
 		_set_view(target)
 		_transitioning = false
+		_queue_web_home_state()
 		_update_casebook_access()
 		return
 
@@ -124731,6 +124861,7 @@ func _transition_to(target: ViewMode) -> void:
 	await fade_in.finished
 	_transition_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_transitioning = false
+	_queue_web_home_state()
 	_update_casebook_access()
 
 
@@ -125178,6 +125309,7 @@ func _on_web_language(arguments: Array) -> void:
 func _sync_web_language() -> void:
 	if OS.has_feature("web"):
 		JavaScriptBridge.eval("window.__juliaSetLanguage && window.__juliaSetLanguage(" + JSON.stringify(_locale) + ", false)", true)
+	_queue_web_home_state()
 
 
 func _can_open_casebook() -> bool:
@@ -125863,6 +125995,7 @@ func _add_edition_setting(parent: VBoxContainer) -> void:
 
 
 func _update_edition_status() -> void:
+	_queue_web_home_state()
 	var message := "×”×¡×™×¤×•×¨ ×•×”×©××™×¨×•×ª ××©×•×ª×¤×™× ×œ×©×ª×™ ×”××”×“×•×¨×•×ª." if _locale == "he" else "Both editions share your story and saves."
 	if not _edition_switch_error.is_empty():
 		message = _edition_switch_error
@@ -126200,6 +126333,8 @@ func _add_volume_setting(parent: VBoxContainer) -> void:
 	slider.step = 0.01
 	slider.value = _master_volume
 	slider.value_changed.connect(_on_volume_changed)
+	if OS.has_feature("web"):
+		slider.value_changed.connect(_queue_web_home_state.unbind(1))
 	row.add_child(slider)
 
 
@@ -126220,6 +126355,8 @@ func _add_audio_category_setting(parent: VBoxContainer, category: String) -> voi
 	slider.value = AudioPreferences.level(category)
 	slider.tooltip_text = title
 	slider.value_changed.connect(func(value: float) -> void: AudioPreferences.set_level(category, value))
+	if OS.has_feature("web"):
+		slider.value_changed.connect(_refresh_web_home_audio_levels.unbind(1))
 	row.add_child(slider)
 
 
@@ -126273,6 +126410,7 @@ func _on_reduced_motion_toggled(enabled: bool) -> void:
 	if is_instance_valid(_full_adventure):
 		_full_adventure.set_reduced_motion(enabled)
 	_save_preferences()
+	_queue_web_home_state()
 
 
 func _on_volume_changed(value: float) -> void:
@@ -126304,6 +126442,7 @@ func _update_fullscreen_button() -> void:
 	if not is_instance_valid(_fullscreen_button):
 		return
 	_fullscreen_button.text = _copy("windowed") if _is_fullscreen() else _copy("fullscreen")
+	_queue_web_home_state()
 
 
 func _apply_texture_filter() -> void:
@@ -127464,7 +127603,7 @@ func _qa_wait_for_intro_controls(view: JuliaFullAdventureView) -> void:
 			controls_reported = true
 			_qa_render_state("intro_controls")
 		await get_tree().create_timer(0.1).timeout
-      GDSCe   ”N (µ/ı ”N œ·®I!A·nÏ'4x€Ù	Z+²´ni^AIğV|Ã‡n¬ÎØ`ëD×Hc*aŒ©„1¦'L]‹ìîîîîîîî–‹î® Œƒ³k‚qYvI0®Ê®ÆMÙÁ¸'»—d ÆıØåÀ8Û.Gã^»}Ûc£ovìÊúÇ.¬olìºúvÆ.¾±kÑ·­]Vß¨¸5±KÑ·#v-ğMk—ß|Ø5õí »}£a¢o(ì:ô„Û»¢¾U°ËĞ·vA}S´+o¿]Oßí*ôíÏMÏ.BßæìôÍ.AßÊÜºì2à›•]¾AÙåçÛ’Û‘]|¾Ùµç›n—o³]y¶í±Ï69llì’³]q¶±Î6K»Şl›´ËÍ6)vµÙi›m°õ°KÍ¶v¡Ù&Ã®3Û^ØefÛ	»Êla™mì³- ¶v…Ù¦h˜m‡vyÙ–À®.Ûíâ²­ÍíÍ®,ÛĞìÂ²ÍË®+Û¨ì²²­‰É®)Û‚ì’²m·+Ê6Ú.(O®İ±«É59v1¹¶Æ®%×ÌØ¥ä»’\ÛÚ…äÚµ'v¹ÆÄ."×ŒØ5äšÖ.!×|¨á°È5vı¸C…]¾k%Ô>Øµ»¦Á.İ5
+                   GDSCe   ”N (µ/ı ”N œ·®I!A·nÏ'4x€Ù	Z+²´ni^AIğV|Ã‡n¬ÎØ`ëD×Hc*aŒ©„1¦'L]‹ìîîîîîîî–‹î® Œƒ³k‚qYvI0®Ê®ÆMÙÁ¸'»—d ÆıØåÀ8Û.Gã^»}Ûc£ovìÊúÇ.¬olìºúvÆ.¾±kÑ·­]Vß¨¸5±KÑ·#v-ğMk—ß|Ø5õí »}£a¢o(ì:ô„Û»¢¾U°ËĞ·vA}S´+o¿]Oßí*ôíÏMÏ.BßæìôÍ.AßÊÜºì2à›•]¾AÙåçÛ’Û‘]|¾Ùµç›n—o³]y¶í±Ï69llì’³]q¶±Î6K»Şl›´ËÍ6)vµÙi›m°õ°KÍ¶v¡Ù&Ã®3Û^ØefÛ	»Êla™mì³- ¶v…Ù¦h˜m‡vyÙ–À®.Ûíâ²­ÍíÍ®,ÛĞìÂ²ÍË®+Û¨ì²²­‰É®)Û‚ì’²m·+Ê6Ú.(O®İ±«É59v1¹¶Æ®%×ÌØ¥ä»’\ÛÚ…äÚµ'v¹ÆÄ."×ŒØ5äšÖ.!×|¨á°È5vı¸C…]¾k%Ô>Øµ»¦Á.İ5
 vå®=°w-k—íZÕ®Ú5DµvÍ®	Ú%»ÆgWìZ]¯kojgv1]ë2S×®ÌÄÇ5)3íqÍ©Fd¦<®ùf²ãn¦:®ÅfZ Óò˜iiqĞ@3c¦KÓ¾˜Ii[Ğ®˜éŒiPÌdÆ4&f*ch@Ì4Æ´Ğh˜é‹i4hÌÄÅ´fª4š£™¶˜V5“ÓÑ fš4MĞLXLË3ÓÓäÌTÅ463Q1mËLSL›2“Ó–ÌÅ4"´´m6S$&HÏî˜É1ÏÖ˜i‰gfÌ¤Ä³/fBâÙÖLG<³b&#=1cb¦"!`&"õ0“Ïn˜)ˆg6Ìh˜é‡g1Ì\˜©‡g&ÌÄÃ3fÚáÙ³ Ìt€gÌ”Ã³fÂáY³«™lxÆÀL5<S`&<C4K`¦<+44Ï˜‰ ÏüÌöÌäÂ3<³:3±ğ,ÎL+<s3“
 ÏÖÌĞÌtÂ303™ğLË¬ÊL$<s2ÓÏÌ$Â³ ³İL<»Íb3q°l™°L™6Xæ†,™2XÆL,Ûšé‚eVÈœ˜©‚eKÌDÁ²#dBÌ$Á²fŠ`™3A°,†™ °Ì…™X–ÂL–… ÀL–U0Ö2G²fb`ÙÕL‹–%šÉj"Ù3)ZFh&ªe}fšZfGöf¦ß22².2)3!°‰¬i&BËp3ZÆÃc&@ÇÛšÉÏ1J3õ9öh&>Ç’ˆ	1“c˜)Ï±fÂs,„X3Ù9€™êÃŠ)šiÎ±©™äûÍç¡™à4Ó›cb|byfbsÌÎLkÍ™IÍ17±03¡9–e¦3Ç¦Ìdæ˜’˜o&2Çl396›IÌ1Ì™ÀSc¦/ÃÄ˜ÉË0K°I3q&,ÒLX†)1Ó•aEÌde0f¢2¬†™¦‹a&)ÃT€‘0”aÌôd˜39k&&ÃÍ´d¢™œ†‚	š)É°>3!vg¦#ÃæÀÚÌTdXš™ˆ3Sa_f2lËL?†]™©i”™|Ãœ`E`A`¼™tÃl3å†ÉfÂsÍtûÅÇL¶_x¼æxµñRc&Ù/3fŠıc&Ø//fzıª4“ëW¯+^S¼xAúzü:âyü"âxü
 âÕÃë /¾€_3œ_0|_-\_)<_%¼BxuğÚàm(àgã_ã—£'àWÖkÑ‹ê•èhü‚ú¿İŒ_€^|NÆ/</:/8Œ_hşÅ/2/0ïâ—sñË‹ÊÊ·~1ù¿’\‹_EÅ¯ §ôË÷I¿t/ÛKö*R±O±kK±«G±K./\Y\Ò®)i×‡´Ò›ØµÄí:Â¥åúÁ…Ã‘ØÅÂØ5ÂØ%€#`®\U®ßµvp!võy»èˆ]kşÃ.1×a—•ç°ËÉqØuÄÄÅsÑn€]®Ó0“Ÿa&8.ÃLk¼ 3%€	Ã0'ÀL^ü…™º¸3m½…™(…™¬`‚â*ÌôÄS˜IÒQ˜éÑO˜)‰›0^ÂLZL@0ùÀ¤ÃC˜é†ƒ0ÿ`¦îÁL/0µpfJá˜©„`¦¾ÁL0	àÌ¤Á1˜É‚_0Ó·`¦˜x fÊbºú3U]‚™`:tf2ôfz: f*Ä$ˆéÏ˜iÏÍtçŒf¢ó¬™Ü0µùÕLiÎÀLe˜ÂÜj¦.LY®h¦*§š)Ê˜©É˜I	“&!L½š‰÷ßL»KÍT{ÔL4¦Óøô>Àïx¡Ûñ^Ç	ún\ºWã€Æÿ|Œû¹ïó0Îç–*aq<¿âwn¯ó'œøœ3q9_B‰Ãys"îæCøp6ï‡l¨!†H8™ğ1¡*ˆÀVÕT"D† h6GrÄ‘!B‚ iòõx;îf«Ñd1©§ë˜Bxº²:ÅÀ?küôyzÓf 7n~0òIU1²ºB´@”!,]VÔï
@@ -141662,19 +141801,18 @@ a°ÍÊth§e    ,   rooms_shared/streets/street16-v1.png.import À¬7    Ç       
 ‡‰á²VìĞ¾|Ja	^‚    (   src/domain/legacy_asset_index.gd.remap  @!7    8       ñÜ»Ï:£ORƒz{¾$V    $   src/domain/legacy_asset_index.gdc   €!7    ü%      Z	¯Ğ6ğ)1
 KŠ¼º‹Ù    ,   src/domain/legacy_content_catalog.gd.remap  €G7    <       ßøˆš‡1rï£ÿ    (   src/domain/legacy_content_catalog.gdc   ÀG7    q[      É$E² L—†&œ÷k    (   src/domain/legacy_game_state.gd.remap   @£7    7       -äï«óØ“¥lZ¬‘        src/domain/legacy_game_state.gdc€£7    »$      Û9˜Ì¾yLÜYø¶ôê±‡    $   src/domain/legacy_session.gd.remap  @È7    4       5Î™îè:‚Q @ç        src/domain/legacy_session.gdc   €È7    İ]      øÇ”ÙÀ¸ŸïC‚ó'       src/domain/save_store.gd`&‘7    ‹      KÆwOø¯$Y†¹%d¾Ö”       src/domain/save_store.gdc   €±‘7    k      iì'|9Ñ?ÚqUÅé;`(    ,   src/domain/visual_remaster_registry.gd.remap ’7    >       1‰['iığ¼yØ7Ò°8    (   src/domain/visual_remaster_registry.gdc à’7    ùC      Šî*Aò8Å	L7°î´ş    ,   src/minigames/asit_minigame_host.gd.remap   à`’7    ;       ‘÷hÿ‹*Ö Öèk–½X    $   src/minigames/asit_minigame_host.gdc a’7    Z      A¢ü‰©$Ê¨Æ6¦Cf    ,   src/minigames/asit_minigame_view.gd.remap   €x’7    ;       ™gÇöùĞ¼[vBªâ¨    $   src/minigames/asit_minigame_view.gdcÀx’7     Š      ‰½Aç+p¨¢“Ê=Ò    ,   src/minigames/asit_print_backdrop.gd.remap  À“7    <       Ü$ß££ºx+ú2³cŞ³‘    (   src/minigames/asit_print_backdrop.gdc    “7    æ      ìIeR†ù3ˆšğ+Â    $   src/minigames/lab_activity.gd.remap  “7    5       ã½¬Œö«'xûcºJ§i        src/minigames/lab_activity.gdc  @“7    v1      êÒ£CT¸|«Bd…õÊ    ,   src/minigames/lab_balance_visual.gd.remap   À<“7    ;       ÿ˜Ç b‰ç	©4Ø‚šáæ    $   src/minigames/lab_balance_visual.gdc =“7    0      †Îô/	±_Ê@1!¨ú_    $   src/minigames/minigame_copy.gd.remap@M“7    6       ©Ô«&Õfj;ä|±        src/minigames/minigame_copy.gdc €M“7    Ì       %pÊ3æpàú¼’Ï|›    ,   src/minigames/modern_lab_pan_front.gdshader `n“7    ×      «…ÄùºgH`–•ŞÇr    (   src/minigames/modern_lab_puzzle.gd.remap@p“7    :       \¡òt	şr|Ãx#ä^ì    $   src/minigames/modern_lab_puzzle.gdc €p“7    ,0      {³á+ª~ôÌšEV    0   src/minigames/modern_lab_touch_controls.gd.remapÀ “7    B       “²âñwÏ&R(z¥öûÌ    ,   src/minigames/modern_lab_touch_controls.gdc  ¡“7    ³'      ı/šk/Õ»’"›ji    ,   src/minigames/modern_note_rubbing.gdshader  àÈ“7    |      BÀ?«ï5ú*êE.gUVĞ    ,   src/minigames/modern_photo_puzzle.gd.remap  `Ë“7    <       Ì¥iy$A÷ØaŒ^åügÙà    (   src/minigames/modern_photo_puzzle.gdc    Ë“7    d=      N˜ÀI4÷	JÍ-Š,­½D    0   src/minigames/modern_trivia_controls.gd.remap    	”7    ?       Aç¶d­ÂÉS£§1¡    (   src/minigames/modern_trivia_controls.gdc`	”7    ’      Æ·&0¸,ÆÑñbpâ~oå    ,   src/minigames/modern_trivia_scene.gd.remap   '”7    <       GIk~bcÀŞŒÎŞå)À    (   src/minigames/modern_trivia_scene.gdc   @'”7    >      ¾kYÅhô
 ‹EU!MC«    ,   src/minigames/modern_watch_scene.gd.remap   €F”7    ;       Vy¡ëIÈq±Wz——¼Ö    $   src/minigames/modern_watch_scene.gdcÀF”7    O      æOúbös‡®~ÁËÓ¨‡Ê    0   src/minigames/original_minigame_view.gd.remap    c”7    ?       ©"ıÎ‘ãÙXÕä6¸™ä    (   src/minigames/original_minigame_view.gdc`c”7    8e      \‰1A,ùê-ûÚ–&!.o    ,   src/minigames/original_photo_mask.gdshader   È”7    c       =ä‡bå hÛ6m¬    (   src/minigames/photo_activity.gd.remap    Ì”7    7       !Ü”bİ£öà`6Q9ˆİï        src/minigames/photo_activity.gdc`Ì”7          ÜW"‚¥Å^¸‘ ÌÎ    (   src/minigames/trivia_activity.gd.remap  €å”7    8       Œëì~ÀwØÇï“´¡š]    $   src/minigames/trivia_activity.gdc   Àå”7    8#      Á%©’ĞóÉv@/šä íC    (   src/minigames/watch_activity.gd.remap    	•7    7       àımıËCW´ )?59ÑÙ        src/minigames/watch_activity.gdc@	•7    è      „-6r:p;ĞG¾<H·Á    ,   src/minigames/web_activity_controls.gd.remap@•7    >       Ìâ…²xÕŒkœZ›Á    (   src/minigames/web_activity_controls.gdc €•7    U      ÿGmíùÚ'WŞÉ4º|L    8   src/presentation/adventure_stage_placeholder.gd.remap   à2•7    G       u’{j²Àj9jşà€Tb    0   src/presentation/adventure_stage_placeholder.gdc@3•7    ²      Ğ
-Gy»Ü1ûv5"L¥nÅ    ,   src/presentation/audio_preferences.gd.remap  I•7    =       ³Ø»gTŒU%Ò†ÃCÉ	co    (   src/presentation/audio_preferences.gdc  @I•7    á      vçuØŠ³5Ò}îŠOÎ    0   src/presentation/director_bitmap_ink.gd.remap   @U•7    ?       ¼–#Ÿ6Ftf–Âi>    (   src/presentation/director_bitmap_ink.gdc€U•7    É      xhûgæq§©ÛĞËá    ,   src/presentation/ending_sequence.gd.remap   `\•7    ;       Ô~DyPé„İ¿Ï×Q±ô„›    $   src/presentation/ending_sequence.gdc \•7    q.      š“‚Åø„˜¯2ÖwIq€´    ,   src/presentation/evidence_journal_view.gd    ‹•7    z¬      ƒ·/îJ•Ú«Ï„JUÛ    ,   src/presentation/evidence_journal_view.gdc   7–7    ¤|      Mx¹ìÙĞÊñ    (   src/presentation/full_adventure_view.gd `´–7    Ô„     ‹]è¢ˆ0ä…'^•+    (   src/presentation/full_adventure_view.gdc@9™7    3™     Àôb¸5Ğò­¾ì`ÕG]    0   src/presentation/inventory_luggage_tag.gd.remap €Òš7    A       0Í/Íší(6³PlÃ€è    ,   src/presentation/inventory_luggage_tag.gdc  àÒš7    R      ¥¼;P™[ï·CA[Å    4   src/presentation/legacy_adventure_presenter.gd.remap@×š7    F       —díì‰Áåe‹Ó<*N‘    0   src/presentation/legacy_adventure_presenter.gdc  ×š7    :£      8˜h±C"Ærj¸Ùf™Àõ    4   src/presentation/legacy_dialogue_overlay.gd.remap   àz›7    C       ê£rÏeØ;fâ¼ç8A­    ,   src/presentation/legacy_dialogue_overlay.gdc@{›7    ¹H      MlÕõq/Ğ›OÁ+ƒ½”    ,   src/presentation/legacy_effect_host.gd.remap Ä›7    >       iBÚ±ùåõ{{ï%pôÃài    (   src/presentation/legacy_effect_host.gdc @Ä›7    ¼      ³~x2Ì°§bªßıâˆ‘í    <   src/presentation/legacy_random_animation_scheduler.gd.remap  Tœ7    M       '¨U°pQÿGÑ÷!·    8   src/presentation/legacy_random_animation_scheduler.gdc  `Tœ7    Ò      îkk—Êš¾–Ç¸Sáe    0   src/presentation/legacy_score_surface.gd.remap  @aœ7    @       T~ÛCRğN*Õ€¼\    ,   src/presentation/legacy_score_surface.gdc   €aœ7    ‹      ±`“KS‘oÍS0=©°…    ,   src/presentation/letterbox_ambience.gdshader |œ7    ‚      Œ³ô~À« İF·i–ÚÍ        src/presentation/main_shell.gd  À„œ7    ºª     Ñ’íç›U…êRV{QQ        src/presentation/main_shell.gdc €/Ÿ7    KÇ     šRæ–<o…Tæv4â-    4   src/presentation/modern_actor_expression.gd.remap   àö 7    C       öÉ¡Z…dn5K<^WbÑ    ,   src/presentation/modern_actor_expression.gdc@÷ 7    M      Az¢·7ÊqÕéÁ–ÁC3.    ,   src/presentation/modern_actor_lips.gdshader  ü 7    æ0      N>A&¡F,ôYå;“    0   src/presentation/modern_actor_sprite.gd.remap    -¡7    ?       ÷±ğÑĞOe»ÕXõ´Åª    (   src/presentation/modern_actor_sprite.gdcà-¡7    Õ8      $¶œÌRÖj…"ô°b     4   src/presentation/modern_actor_upper_face.gd.remap   Àf¡7    C       …å?O=øNä—½öÕ;î    ,   src/presentation/modern_actor_upper_face.gdc g¡7    ì       z·“4€†c/<‚›    4   src/presentation/modern_actor_upper_face.gdshader    ˆ¡7    3      @µŞU6¯%\aâ=
-Ón5    0   src/presentation/modern_actor_upper_face.json   @»¡7    +      /q@u8ëj½­kˆ$™    4   src/presentation/modern_alice_ending_watch.gd.remap €»£7    E       TZpp(l@Bt“pûá    0   src/presentation/modern_alice_ending_watch.gdc  à»£7    ¤      O—1ÏÊ“¬‚í*è¸]    4   src/presentation/modern_alice_expressions.gd.remap   Ã£7    D       ;Õ2ıud}Í_ö^Ù    0   src/presentation/modern_alice_expressions.gdc    Ä£7          ‰§MÔZÇß_b83wVû    4   src/presentation/modern_body_polygon_mask.gdshader   Õ£7    ®      û»ô…\ê/£&Ó"m¾`¨    0   src/presentation/modern_cafe_alice_body.gd.remap`Ù£7    B       Şªb©<=òGºGë    ,   src/presentation/modern_cafe_alice_body.gdc ÀÙ£7    )      øş‚¯±£FĞ@2"¸®    ,   src/presentation/modern_cafe_camera.gd.remapà¤7    >       M.`b)Ê<+¹ŠÎò$:    (   src/presentation/modern_cafe_camera.gdc  ¤7    W      }iäœêÊ*ÄÔ4Hâ¤    4   src/presentation/modern_cafe_dorothy_body.gd.remap  €¤7    D       BŞEMãóŠûQtğ¼}£    0   src/presentation/modern_cafe_dorothy_body.gdc   à¤7    º.      ˆ1Æªé· €±¾¾™+    ,   src/presentation/modern_cafe_scene.gd.remap  >¤7    =       ø5hõ”€º°Ÿl”ÈlWÀ    (   src/presentation/modern_cafe_scene.gdc  à>¤7    H'      Ç´Åvyï0évHÎ†´\ê    0   src/presentation/modern_character_art.gd.remap  @f¤7    @       ÌÂ¸ónaBª¼i¼¿    ,   src/presentation/modern_character_art.gdc   €f¤7    J      Ó2›“Ò!=~RRãõ5É    0   src/presentation/modern_cloth_ambient.gd.remap  à}¤7    @       3œ</RáóËòÆÚ'`iu    ,   src/presentation/modern_cloth_ambient.gdc    ~¤7    ª      óÑŠ^;~¯‚¹ï§®ì@E    0   src/presentation/modern_clothing_camera.gd.remapà†¤7    B       ³ê†K¼bÓ“òjF]    ,   src/presentation/modern_clothing_camera.gdc @‡¤7    ß      kÍ´_˜…İ|–&'€Ê´    0   src/presentation/modern_credits_panel.gd.remap   “¤7    @       c	KE\Ó¾¼e›    ,   src/presentation/modern_credits_panel.gdc   `“¤7    ×-      #˜KôVdÔM±|œŒq”›    ,   src/presentation/modern_dialogue_overlay.gd @Á¤7    ÀQ      2ôO(ş‘W]Ğ¥§'Ç¬_    ,   src/presentation/modern_dialogue_overlay.gdc ¥7    8      ìÁ êiä•@Ä‡@w    4   src/presentation/modern_dorothy_expressions.gd.remap K¥7    F       É³nÛ3İob¡ú?n²'    0   src/presentation/modern_dorothy_expressions.gdc  L¥7    -      ‰Fò?ÚUÍ^Pı2†’Kn    0   src/presentation/modern_dylan_sprite.gd.remap   @]¥7    ?       Úå¸»v‚’àQü~±i+B    (   src/presentation/modern_dylan_sprite.gdc€]¥7    Ş      :™š7>©…‡ÃRŞx³#    4   src/presentation/modern_evidence_document.gd.remap  `{¥7    D       *hcF¦_™ÛÎ{Öú§ücF    0   src/presentation/modern_evidence_document.gdc   À{¥7    j.      …¼IjŸÁôtNÀ—eKz    0   src/presentation/modern_field_notebook.gd.remap @ª¥7    A       Õ…€¦LÊ›;æÆi2Ç™    ,   src/presentation/modern_field_notebook.gdc   ª¥7    VY      rÆFDeê¥°SùM7ø    0   src/presentation/modern_finale_scene.gd.remap    ¦7    ?       ï;—”&ò}dÆÆ››û“H    (   src/presentation/modern_finale_scene.gdc@¦7    *      gø\FóC½üÁóŠ2Óïˆ    ,   src/presentation/modern_future_gallery.gd   `.¦7    CC      øe	Ê¶^B²n/Âã!^    ,   src/presentation/modern_future_gallery.gdc  Àq¦7    1      v‰Ëô<•,/¨Êï›    ,   src/presentation/modern_intro_actor.gdshaderà¢¦7    R      ÌVg%–ßù¿déVÿ     ,   src/presentation/modern_intro_light.gdshader@¿¦7          û€÷hW÷0ß°±Í23    4   src/presentation/modern_intro_portal_actor.gdshader àÌ¦7    „      ê¸gÖØˆZbéÉ-·î    ,   src/presentation/modern_intro_stage.gd.remap€Ñ¦7    >       )‘æ
-9ae`í0	cÄçË    (   src/presentation/modern_intro_stage.gdc ÀÑ¦7    ÍF      qÁ {Let•:ØÚÈ	˜    ,   src/presentation/modern_intro_voice.gd.remap §7    >       =ææÉ~È(,ï|{¹Nå    (   src/presentation/modern_intro_voice.gdc à§7    C      íı¼‰ıæß¤›˜`KîK    0   src/presentation/modern_inventory_panel.gd.remap@ §7    B       ¤Æçšw!_eÙªó³‡d    ,   src/presentation/modern_inventory_panel.gdc   §7    ù      Ã;m*¼4³4ªœxİd»    4   src/presentation/modern_item_presentation.gd.remap   5§7    D       ¥Ù…ä´S7Ñu2·ùQƒÎy    0   src/presentation/modern_item_presentation.gdc    6§7    ı
-      w.!dºXû­?×¿    0   src/presentation/modern_jimmy_held_clue.gd.remap A§7    B       ‘è¿ Œ£éõó"A¥df§    ,   src/presentation/modern_jimmy_held_clue.gdc `A§7    Ø      >âç9ì­ªì¦çÓ¶2t    4   src/presentation/modern_lab_evidence_ink.gd.remap   @H§7    C       [“@LÕH{D«},	Ò®    ,   src/presentation/modern_lab_evidence_ink.gdc H§7    ¾      Í–½¼r‹lòÏü%”KˆPÒ    ,   src/presentation/modern_lab_scene.gd.remap  `T§7    <       kïl1’†V¤ô,Í(cN·    (   src/presentation/modern_lab_scene.gdc    T§7          5²EC/1mÊ[™8»õ)»F    0   src/presentation/modern_layered_action.gd.remap Àp§7    A       —”™KÌLÄ.IXÍ$p    ,   src/presentation/modern_layered_action.gdc   q§7    Æ      Á¯Ÿ®&˜¶O³ª‰×Ñ½5    ,   src/presentation/modern_map_panel.gd.remap   §7    <       d 4$|®¼¾YXÙm    (   src/presentation/modern_map_panel.gdc   @§7    ]A      ¬Á³1Õİÿ¦$Xô‘T(    0   src/presentation/modern_mel_portrait.gd.remap    Ğ§7    ?       âæ¹6œˆB–Ö±ˆ¬Á=ˆ    (   src/presentation/modern_mel_portrait.gdcàĞ§7          šqTİ¡Di*ˆM<\¤    ,   src/presentation/modern_mell_phone.gd.remap  İ§7    =       ¨ê…›0l¶!4Ÿi    (   src/presentation/modern_mell_phone.gdc  @İ§7    +      ;K¿î–Xà_PõÄÏ    ,   src/presentation/modern_mell_voice.gd.remap €û§7    =       é;Z4{¦JU¼MqP}    (   src/presentation/modern_mell_voice.gdc  Àû§7          x	ú÷P-ãx8    (   src/presentation/modern_neon.gdshader   à¨7    ~      Ÿƒ$MşbÔXŸÉ
-ÌöM    ,   src/presentation/modern_opening_art.gd.remap`¨7    >       OÃ 1	šP`u×”náM    (   src/presentation/modern_opening_art.gdc  ¨7    í      xğÀéÿw/·à    ,   src/presentation/modern_paper_scene.gd.remap ¨7    >       8rx¦0·’³%kÔj²<ù    (   src/presentation/modern_paper_scene.gdc à¨7    Ê"      á.>ÄíjØ¸o«~°àv'    4   src/presentation/modern_parent_portraits.gd.remap   À9¨7    C       Ù1şQ˜ë†TPŒÔN    ,   src/presentation/modern_parent_portraits.gdc :¨7    é      Ïğa[§]ü\WP^d›Ì    0   src/presentation/modern_peace_poster.gdshader    G¨7    8      ĞÜßı:ôD8ƒªã    0   src/presentation/modern_photo_camera.gd.remap   `H¨7    ?       ]ÖAv¯cN^µw½6:    (   src/presentation/modern_photo_camera.gdc H¨7          ‡á  ©ÂHI
-ÈD¹6    ,   src/presentation/modern_photo_scene.gd.remapÀV¨7    >       #àq¦á1•W:éùñbrÎ    (   src/presentation/modern_photo_scene.gdc  W¨7    7=      :ã‘¢W¦Èˆ¯¢öÊÎ    (   src/presentation/modern_portal.gd.remap @”¨7    9       âe¸}_Z»ˆŠúì+     $   src/presentation/modern_portal.gdc  €”¨7    *      } îÍrá<iG2å¶H    (   src/presentation/modern_portal.gdshader ÀŸ¨7    À      ìPè+o™sNƒ¨ì×…    0   src/presentation/modern_portal_video.gd.remap   €£¨7    ?       Á a§³àÜ ¿L¦‘ĞH    (   src/presentation/modern_portal_video.gdcÀ£¨7          t%å‹Â÷ÂğÒ½îÓ):q    4   src/presentation/modern_rick_body_layers.gd.remap   àÂ¨7    C       Fëû|êè{RšG×èbT-/    ,   src/presentation/modern_rick_body_layers.gdc@Ã¨7    /      Ú–Í_îÊ*¨X¸ Å    8   src/presentation/modern_rick_body_underpaint.gdshader   €Ô¨7    ê      Ä¶Æsx¨ß‘]ÄF_ò5”    4   src/presentation/modern_rick_evidence_base.gdshader €Û¨7    f      tD'ˆóKy[¹&Ÿ‚‰    8   src/presentation/modern_rick_evidence_sprite.gd.remap    ß¨7    G       •÷_Óüê=ª1š±C.    0   src/presentation/modern_rick_evidence_sprite.gdc`ß¨7    X	      ®N‚Œ 6iP?áÒØ|pGy    8   src/presentation/modern_rick_gesture_body_v3.gd.remap   Àè¨7    G       BºŞ¬”;£ &8JE×÷ù    0   src/presentation/modern_rick_gesture_body_v3.gdc é¨7    .$      ªÉ3|ÄuO›¼‡F~Dd    8   src/presentation/modern_rick_gesture_sleeve_v3.gdshader `©7    ı      úÍ>C`¡ó®UğM˜ü    8   src/presentation/modern_rick_gesture_sprite_v3.gd.remap `©7    I       ò[ä;ƒğ“'c–7    4   src/presentation/modern_rick_gesture_sprite_v3.gdc  À©7          ´ş¸ôüã0A¬ˆñ_6    8   src/presentation/modern_rick_gesture_underpaint.gdshaderà ©7    Ì      ƒš8Ó"Y$±%]Õ*ÖöÀ¤    4   src/presentation/modern_rick_reading_body.gd.remap  À#©7    D       ôÚÕUè{‚à¾Ë
-ïQµ    0   src/presentation/modern_rick_reading_body.gdc    $©7    ê      mßÓ­ZsEá#^¯V¯#
-    4   src/presentation/modern_rick_reading_mask.gdshader   5©7    ô      5HÅ±ÌíD[Ó˜    <   src/presentation/modern_rick_reading_polished_body.gd.remap  8©7    M       EJ^*ÉŸu4]z}ñÄf    8   src/presentation/modern_rick_reading_polished_body.gdc  €8©7    n      ŸMiQÁ.L†!KE?l›ú    4   src/presentation/modern_rick_reading_sprite.gd.remap J©7    F       6[—EÂü¬ÜŸATÒ£¼    0   src/presentation/modern_rick_reading_sprite.gdc `J©7    R      ”Ç˜÷ıÑd1srÂ})    8   src/presentation/modern_rick_signing_sprite_v1.gd.remap ÀV©7    I       ³…JœBxG[Â`õÕ«ã    4   src/presentation/modern_rick_signing_sprite_v1.gdc   W©7          óìh’dÊ¸q<Ğï¡.3Ğ    0   src/presentation/modern_rick_signing_v1.gdshader@b©7    ¹      x“³¿°Q8Â¹âág°    8   src/presentation/modern_rick_singing_sprite_v1.gd.remap  e©7    I       Ki°Úk]¤	yÊZzŞØN³    4   src/presentation/modern_rick_singing_sprite_v1.gdc  `e©7    Ä      `ƒR‚ŠóĞU¬=h—üá5    0   src/presentation/modern_rick_singing_v1.gdshader@n©7    !      ƒ[[B4MĞ1˜<ï    8   src/presentation/modern_rick_wide_listener_v1.gd.remap  €p©7    H       ûB•r'è,¹v~5Ô?    4   src/presentation/modern_rick_wide_listener_v1.gdc   àp©7          ÍçåRØ° S%°Ğ˜FÛÃ    (   src/presentation/modern_sepia.gdshader   t©7    w      9™tÕèÇÈı'ÕÔ€İƒË    8   src/presentation/modern_sheila_cue_sprite_v1.gd.remap   €u©7    G       ñ2÷ÌÉõŒjPkp¿Ÿ(„    0   src/presentation/modern_sheila_cue_sprite_v1.gdcàu©7    s      a4AÊµKø²"ÙÑÙz    4   src/presentation/modern_sheila_palm_body_v1.gd.remap`†©7    F       äÄ÷¨Sí·¢"¹>ÃâåXC    0   src/presentation/modern_sheila_palm_body_v1.gdc À†©7    ì      Â¹@-Ì0?fíœ¯M;    4   src/presentation/modern_sheila_palm_mask.gdshader   À˜©7    ®      û»ô…\ê/£&Ó"m¾`¨    8   src/presentation/modern_sheila_palm_sprite_v1.gd.remap  €œ©7    H       ì,ØçuÅèÈš{Í¾    4   src/presentation/modern_sheila_palm_sprite_v1.gdc   àœ©7    u      şÚ)uî–iÎå×tl·¼    8   src/presentation/modern_sheila_palm_underpaint.gdshader `®©7    ¹      =õqw*¯ô1 s`¼x    ,   src/presentation/modern_speech_cues.gd.remap ²©7    >       ˆtgx$R eKø	ø°¦%    (   src/presentation/modern_speech_cues.gdc `²©7    J      :Şí"·™ŸÏïÛ™”I    4   src/presentation/modern_street12_effects.gd.remap   ÀÀ©7    C       Ä\€yM›-Ö]B`‡    ,   src/presentation/modern_street12_effects.gdc Á©7          ô¨N×é¡Ó<BÈV ÚVV    4   src/presentation/modern_street12_effects.gdshader   @Ğ©7    å      —&WÎúŒ‰~–g¥FÖ    0   src/presentation/modern_street1_effects.gd.remap@Ö©7    B       6ïH€{@ç¦á/É    ,   src/presentation/modern_street1_effects.gdc  Ö©7    n      R­ÈÆzj‘ àg«Õ›s
-    0   src/presentation/modern_street1_effects.gdshader ç©7    Ø      «õİÁ‚¾.*šBR¸¿v›     0   src/presentation/modern_street2_rack.gd.remap    ÷©7    ?       ·OE›¦İõAš{î    (   src/presentation/modern_street2_rack.gdc@÷©7    W      îÎˆÛ;— ?lšDMñš    0   src/presentation/modern_street3_effects.gd.remap ı©7    B       ·ÆÒ7R®8àˆ#N    ,   src/presentation/modern_street3_effects.gdc  ş©7    ë      í¾Ñ_Ñ_›¶v²—)!@    0   src/presentation/modern_street3_effects.gdshader 
-ª7    5      .F˜£È¢Ínè÷?iP    0   src/presentation/modern_street5_pigeons.gd.remap@ª7    B       ¥áÍÁ¿µ]ş˜Gš8    ,   src/presentation/modern_street5_pigeons.gdc  ª7    H	      ÎîØÙu	/­Æ3,Íû    0   src/presentation/modern_street5_pigeons.gdshader ª7    ş	      ÃÎ}$ânÅÌœTB    0   src/presentation/modern_street6_effects.gd.remap "ª7    B       ŞàyF{ÑúèÛÓMƒñ    ,   src/presentation/modern_street6_effects.gdc `"ª7    w	      ©^ğ<) #|ŠPœ(­½š˜    0   src/presentation/modern_street6_effects.gdshaderà+ª7    "      o:ÈèL q©¬9<    0   src/presentation/modern_street_travel.gd.remap   0ª7    @       ´à†âdìâMôèxò    ,   src/presentation/modern_street_travel.gdc   `0ª7    #      Ô£/Ôëë‹¶&áÙ€    ,   src/presentation/modern_susan_body.gd.remap  Iª7    =       u Úµ¿ú °·ü5âd<    (   src/presentation/modern_susan_body.gdc  àIª7    %      Gâd§¤<¿Ö`:À
-tëw    0   src/presentation/modern_susan_counter.gdshader   \ª7    ‰       ¢ªö÷iÖĞ Ë˜á    0   src/presentation/modern_susan_face_gaze.gd.remapÀ\ª7    B       (LiAÀ·&pšÈré»¼    ,   src/presentation/modern_susan_face_gaze.gdc  ]ª7          Ìé-©Èp‰Ë«¹P£Ûñ    0   src/presentation/modern_susan_notebook.gdshader @`ª7    ë      —kKØ·º‚«šÏn¤1ù    4   src/presentation/modern_waterfront_effects.gd.remap @bª7    E       £ã]ûîáMë›Vü    0   src/presentation/modern_waterfront_effects.gdc   bª7    È      Lºº—gò
+Gy»Ü1ûv5"L¥nÅ    ,   src/presentation/audio_preferences.gd.remap  I•7    =       ³Ø»gTŒU%Ò†ÃCÉ	co    (   src/presentation/audio_preferences.gdc  @I•7    á      vçuØŠ³5Ò}îŠOÎ    0   src/presentation/director_bitmap_ink.gd.remap   @U•7    ?       ¼–#Ÿ6Ftf–Âi>    (   src/presentation/director_bitmap_ink.gdc€U•7    É      xhûgæq§©ÛĞËá    ,   src/presentation/ending_sequence.gd.remap   `\•7    ;       Ô~DyPé„İ¿Ï×Q±ô„›    $   src/presentation/ending_sequence.gdc \•7    q.      š“‚Åø„˜¯2ÖwIq€´    ,   src/presentation/evidence_journal_view.gd    ‹•7    z¬      ƒ·/îJ•Ú«Ï„JUÛ    ,   src/presentation/evidence_journal_view.gdc   7–7    ¤|      Mx¹ìÙĞÊñ    (   src/presentation/full_adventure_view.gd `´–7    Ô„     ‹]è¢ˆ0ä…'^•+    (   src/presentation/full_adventure_view.gdc@9™7    3™     Àôb¸5Ğò­¾ì`ÕG]    0   src/presentation/inventory_luggage_tag.gd.remap €Òš7    A       0Í/Íší(6³PlÃ€è    ,   src/presentation/inventory_luggage_tag.gdc  àÒš7    R      ¥¼;P™[ï·CA[Å    4   src/presentation/legacy_adventure_presenter.gd.remap@×š7    F       —díì‰Áåe‹Ó<*N‘    0   src/presentation/legacy_adventure_presenter.gdc  ×š7    :£      8˜h±C"Ærj¸Ùf™Àõ    4   src/presentation/legacy_dialogue_overlay.gd.remap   àz›7    C       ê£rÏeØ;fâ¼ç8A­    ,   src/presentation/legacy_dialogue_overlay.gdc@{›7    ¹H      MlÕõq/Ğ›OÁ+ƒ½”    ,   src/presentation/legacy_effect_host.gd.remap Ä›7    >       iBÚ±ùåõ{{ï%pôÃài    (   src/presentation/legacy_effect_host.gdc @Ä›7    ¼      ³~x2Ì°§bªßıâˆ‘í    <   src/presentation/legacy_random_animation_scheduler.gd.remap  Tœ7    M       '¨U°pQÿGÑ÷!·    8   src/presentation/legacy_random_animation_scheduler.gdc  `Tœ7    Ò      îkk—Êš¾–Ç¸Sáe    0   src/presentation/legacy_score_surface.gd.remap  @aœ7    @       T~ÛCRğN*Õ€¼\    ,   src/presentation/legacy_score_surface.gdc   €aœ7    ‹      ±`“KS‘oÍS0=©°…    ,   src/presentation/letterbox_ambience.gdshader |œ7    ‚      Œ³ô~À« İF·i–ÚÍ        src/presentation/main_shell.gd  À„œ7    ÍÃ     GXmFQ¬‹ZGá§t        src/presentation/main_shell.gdc  HŸ7    KÇ     šRæ–<o…Tæv4â-    4   src/presentation/modern_actor_expression.gd.remap    ¡7    C       öÉ¡Z…dn5K<^WbÑ    ,   src/presentation/modern_actor_expression.gdc`¡7    M      Az¢·7ÊqÕéÁ–ÁC3.    ,   src/presentation/modern_actor_lips.gdshader À¡7    æ0      N>A&¡F,ôYå;“    0   src/presentation/modern_actor_sprite.gd.remap   ÀF¡7    ?       ÷±ğÑĞOe»ÕXõ´Åª    (   src/presentation/modern_actor_sprite.gdc G¡7    Õ8      $¶œÌRÖj…"ô°b     4   src/presentation/modern_actor_upper_face.gd.remap   à¡7    C       …å?O=øNä—½öÕ;î    ,   src/presentation/modern_actor_upper_face.gdc@€¡7    ì       z·“4€†c/<‚›    4   src/presentation/modern_actor_upper_face.gdshader   @¡¡7    3      @µŞU6¯%\aâ=
+Ón5    0   src/presentation/modern_actor_upper_face.json   `Ô¡7    +      /q@u8ëj½­kˆ$™    4   src/presentation/modern_alice_ending_watch.gd.remap  Ô£7    E       TZpp(l@Bt“pûá    0   src/presentation/modern_alice_ending_watch.gdc   Õ£7    ¤      O—1ÏÊ“¬‚í*è¸]    4   src/presentation/modern_alice_expressions.gd.remap  ÀÜ£7    D       ;Õ2ıud}Í_ö^Ù    0   src/presentation/modern_alice_expressions.gdc    İ£7          ‰§MÔZÇß_b83wVû    4   src/presentation/modern_body_polygon_mask.gdshader  Àî£7    ®      û»ô…\ê/£&Ó"m¾`¨    0   src/presentation/modern_cafe_alice_body.gd.remap€ò£7    B       Şªb©<=òGºGë    ,   src/presentation/modern_cafe_alice_body.gdc àò£7    )      øş‚¯±£FĞ@2"¸®    ,   src/presentation/modern_cafe_camera.gd.remap ¤7    >       M.`b)Ê<+¹ŠÎò$:    (   src/presentation/modern_cafe_camera.gdc @¤7    W      }iäœêÊ*ÄÔ4Hâ¤    4   src/presentation/modern_cafe_dorothy_body.gd.remap   (¤7    D       BŞEMãóŠûQtğ¼}£    0   src/presentation/modern_cafe_dorothy_body.gdc    )¤7    º.      ˆ1Æªé· €±¾¾™+    ,   src/presentation/modern_cafe_scene.gd.remap ÀW¤7    =       ø5hõ”€º°Ÿl”ÈlWÀ    (   src/presentation/modern_cafe_scene.gdc   X¤7    H'      Ç´Åvyï0évHÎ†´\ê    0   src/presentation/modern_character_art.gd.remap  `¤7    @       ÌÂ¸ónaBª¼i¼¿    ,   src/presentation/modern_character_art.gdc    ¤7    J      Ó2›“Ò!=~RRãõ5É    0   src/presentation/modern_cloth_ambient.gd.remap   —¤7    @       3œ</RáóËòÆÚ'`iu    ,   src/presentation/modern_cloth_ambient.gdc   @—¤7    ª      óÑŠ^;~¯‚¹ï§®ì@E    0   src/presentation/modern_clothing_camera.gd.remap  ¤7    B       ³ê†K¼bÓ“òjF]    ,   src/presentation/modern_clothing_camera.gdc ` ¤7    ß      kÍ´_˜…İ|–&'€Ê´    0   src/presentation/modern_credits_panel.gd.remap  @¬¤7    @       c	KE\Ó¾¼e›    ,   src/presentation/modern_credits_panel.gdc   €¬¤7    ×-      #˜KôVdÔM±|œŒq”›    ,   src/presentation/modern_dialogue_overlay.gd `Ú¤7    ÀQ      2ôO(ş‘W]Ğ¥§'Ç¬_    ,   src/presentation/modern_dialogue_overlay.gdc ,¥7    8      ìÁ êiä•@Ä‡@w    4   src/presentation/modern_dorothy_expressions.gd.remapÀd¥7    F       É³nÛ3İob¡ú?n²'    0   src/presentation/modern_dorothy_expressions.gdc  e¥7    -      ‰Fò?ÚUÍ^Pı2†’Kn    0   src/presentation/modern_dylan_sprite.gd.remap   `v¥7    ?       Úå¸»v‚’àQü~±i+B    (   src/presentation/modern_dylan_sprite.gdc v¥7    Ş      :™š7>©…‡ÃRŞx³#    4   src/presentation/modern_evidence_document.gd.remap  €”¥7    D       *hcF¦_™ÛÎ{Öú§ücF    0   src/presentation/modern_evidence_document.gdc   à”¥7    j.      …¼IjŸÁôtNÀ—eKz    0   src/presentation/modern_field_notebook.gd.remap `Ã¥7    A       Õ…€¦LÊ›;æÆi2Ç™    ,   src/presentation/modern_field_notebook.gdc  ÀÃ¥7    VY      rÆFDeê¥°SùM7ø    0   src/presentation/modern_finale_scene.gd.remap    ¦7    ?       ï;—”&ò}dÆÆ››û“H    (   src/presentation/modern_finale_scene.gdc`¦7    *      gø\FóC½üÁóŠ2Óïˆ    ,   src/presentation/modern_future_gallery.gd   €G¦7    CC      øe	Ê¶^B²n/Âã!^    ,   src/presentation/modern_future_gallery.gdc  àŠ¦7    1      v‰Ëô<•,/¨Êï›    ,   src/presentation/modern_intro_actor.gdshader ¼¦7    R      ÌVg%–ßù¿déVÿ     ,   src/presentation/modern_intro_light.gdshader`Ø¦7          û€÷hW÷0ß°±Í23    4   src/presentation/modern_intro_portal_actor.gdshader  æ¦7    „      ê¸gÖØˆZbéÉ-·î    ,   src/presentation/modern_intro_stage.gd.remap ê¦7    >       )‘æ
+9ae`í0	cÄçË    (   src/presentation/modern_intro_stage.gdc àê¦7    ÍF      qÁ {Let•:ØÚÈ	˜    ,   src/presentation/modern_intro_voice.gd.remapÀ1§7    >       =ææÉ~È(,ï|{¹Nå    (   src/presentation/modern_intro_voice.gdc  2§7    C      íı¼‰ıæß¤›˜`KîK    0   src/presentation/modern_inventory_panel.gd.remap`9§7    B       ¤Æçšw!_eÙªó³‡d    ,   src/presentation/modern_inventory_panel.gdc À9§7    ù      Ã;m*¼4³4ªœxİd»    4   src/presentation/modern_item_presentation.gd.remap  ÀN§7    D       ¥Ù…ä´S7Ñu2·ùQƒÎy    0   src/presentation/modern_item_presentation.gdc    O§7    ı
+      w.!dºXû­?×¿    0   src/presentation/modern_jimmy_held_clue.gd.remap Z§7    B       ‘è¿ Œ£éõó"A¥df§    ,   src/presentation/modern_jimmy_held_clue.gdc €Z§7    Ø      >âç9ì­ªì¦çÓ¶2t    4   src/presentation/modern_lab_evidence_ink.gd.remap   `a§7    C       [“@LÕH{D«},	Ò®    ,   src/presentation/modern_lab_evidence_ink.gdcÀa§7    ¾      Í–½¼r‹lòÏü%”KˆPÒ    ,   src/presentation/modern_lab_scene.gd.remap  €m§7    <       kïl1’†V¤ô,Í(cN·    (   src/presentation/modern_lab_scene.gdc   Àm§7          5²EC/1mÊ[™8»õ)»F    0   src/presentation/modern_layered_action.gd.remap à‰§7    A       —”™KÌLÄ.IXÍ$p    ,   src/presentation/modern_layered_action.gdc  @Š§7    Æ      Á¯Ÿ®&˜¶O³ª‰×Ñ½5    ,   src/presentation/modern_map_panel.gd.remap   ¨§7    <       d 4$|®¼¾YXÙm    (   src/presentation/modern_map_panel.gdc   `¨§7    ]A      ¬Á³1Õİÿ¦$Xô‘T(    0   src/presentation/modern_mel_portrait.gd.remap   Àé§7    ?       âæ¹6œˆB–Ö±ˆ¬Á=ˆ    (   src/presentation/modern_mel_portrait.gdc ê§7          šqTİ¡Di*ˆM<\¤    ,   src/presentation/modern_mell_phone.gd.remap  ö§7    =       ¨ê…›0l¶!4Ÿi    (   src/presentation/modern_mell_phone.gdc  `ö§7    +      ;K¿î–Xà_PõÄÏ    ,   src/presentation/modern_mell_voice.gd.remap  ¨7    =       é;Z4{¦JU¼MqP}    (   src/presentation/modern_mell_voice.gdc  à¨7          x	ú÷P-ãx8    (   src/presentation/modern_neon.gdshader    ¨7    ~      Ÿƒ$MşbÔXŸÉ
+ÌöM    ,   src/presentation/modern_opening_art.gd.remap€¨7    >       OÃ 1	šP`u×”náM    (   src/presentation/modern_opening_art.gdc À¨7    í      xğÀéÿw/·à    ,   src/presentation/modern_paper_scene.gd.remapÀ/¨7    >       8rx¦0·’³%kÔj²<ù    (   src/presentation/modern_paper_scene.gdc  0¨7    Ê"      á.>ÄíjØ¸o«~°àv'    4   src/presentation/modern_parent_portraits.gd.remap   àR¨7    C       Ù1şQ˜ë†TPŒÔN    ,   src/presentation/modern_parent_portraits.gdc@S¨7    é      Ïğa[§]ü\WP^d›Ì    0   src/presentation/modern_peace_poster.gdshader   @`¨7    8      ĞÜßı:ôD8ƒªã    0   src/presentation/modern_photo_camera.gd.remap   €a¨7    ?       ]ÖAv¯cN^µw½6:    (   src/presentation/modern_photo_camera.gdcÀa¨7          ‡á  ©ÂHI
+ÈD¹6    ,   src/presentation/modern_photo_scene.gd.remapào¨7    >       #àq¦á1•W:éùñbrÎ    (   src/presentation/modern_photo_scene.gdc  p¨7    7=      :ã‘¢W¦Èˆ¯¢öÊÎ    (   src/presentation/modern_portal.gd.remap `­¨7    9       âe¸}_Z»ˆŠúì+     $   src/presentation/modern_portal.gdc   ­¨7    *      } îÍrá<iG2å¶H    (   src/presentation/modern_portal.gdshader à¸¨7    À      ìPè+o™sNƒ¨ì×…    0   src/presentation/modern_portal_video.gd.remap    ¼¨7    ?       Á a§³àÜ ¿L¦‘ĞH    (   src/presentation/modern_portal_video.gdcà¼¨7          t%å‹Â÷ÂğÒ½îÓ):q    4   src/presentation/modern_rick_body_layers.gd.remap    Ü¨7    C       Fëû|êè{RšG×èbT-/    ,   src/presentation/modern_rick_body_layers.gdc`Ü¨7    /      Ú–Í_îÊ*¨X¸ Å    8   src/presentation/modern_rick_body_underpaint.gdshader    í¨7    ê      Ä¶Æsx¨ß‘]ÄF_ò5”    4   src/presentation/modern_rick_evidence_base.gdshader  ô¨7    f      tD'ˆóKy[¹&Ÿ‚‰    8   src/presentation/modern_rick_evidence_sprite.gd.remap    ø¨7    G       •÷_Óüê=ª1š±C.    0   src/presentation/modern_rick_evidence_sprite.gdc€ø¨7    X	      ®N‚Œ 6iP?áÒØ|pGy    8   src/presentation/modern_rick_gesture_body_v3.gd.remap   à©7    G       BºŞ¬”;£ &8JE×÷ù    0   src/presentation/modern_rick_gesture_body_v3.gdc@©7    .$      ªÉ3|ÄuO›¼‡F~Dd    8   src/presentation/modern_rick_gesture_sleeve_v3.gdshader €&©7    ı      úÍ>C`¡ó®UğM˜ü    8   src/presentation/modern_rick_gesture_sprite_v3.gd.remap €-©7    I       ò[ä;ƒğ“'c–7    4   src/presentation/modern_rick_gesture_sprite_v3.gdc  à-©7          ´ş¸ôüã0A¬ˆñ_6    8   src/presentation/modern_rick_gesture_underpaint.gdshader :©7    Ì      ƒš8Ó"Y$±%]Õ*ÖöÀ¤    4   src/presentation/modern_rick_reading_body.gd.remap  à<©7    D       ôÚÕUè{‚à¾Ë
+ïQµ    0   src/presentation/modern_rick_reading_body.gdc   @=©7    ê      mßÓ­ZsEá#^¯V¯#
+    4   src/presentation/modern_rick_reading_mask.gdshader  @N©7    ô      5HÅ±ÌíD[Ó˜    <   src/presentation/modern_rick_reading_polished_body.gd.remap @Q©7    M       EJ^*ÉŸu4]z}ñÄf    8   src/presentation/modern_rick_reading_polished_body.gdc   Q©7    n      ŸMiQÁ.L†!KE?l›ú    4   src/presentation/modern_rick_reading_sprite.gd.remap c©7    F       6[—EÂü¬ÜŸATÒ£¼    0   src/presentation/modern_rick_reading_sprite.gdc €c©7    R      ”Ç˜÷ıÑd1srÂ})    8   src/presentation/modern_rick_signing_sprite_v1.gd.remap ào©7    I       ³…JœBxG[Â`õÕ«ã    4   src/presentation/modern_rick_signing_sprite_v1.gdc  @p©7          óìh’dÊ¸q<Ğï¡.3Ğ    0   src/presentation/modern_rick_signing_v1.gdshader`{©7    ¹      x“³¿°Q8Â¹âág°    8   src/presentation/modern_rick_singing_sprite_v1.gd.remap  ~©7    I       Ki°Úk]¤	yÊZzŞØN³    4   src/presentation/modern_rick_singing_sprite_v1.gdc  €~©7    Ä      `ƒR‚ŠóĞU¬=h—üá5    0   src/presentation/modern_rick_singing_v1.gdshader`‡©7    !      ƒ[[B4MĞ1˜<ï    8   src/presentation/modern_rick_wide_listener_v1.gd.remap   ‰©7    H       ûB•r'è,¹v~5Ô?    4   src/presentation/modern_rick_wide_listener_v1.gdc    Š©7          ÍçåRØ° S%°Ğ˜FÛÃ    (   src/presentation/modern_sepia.gdshader   ©7    w      9™tÕèÇÈı'ÕÔ€İƒË    8   src/presentation/modern_sheila_cue_sprite_v1.gd.remap    ©7    G       ñ2÷ÌÉõŒjPkp¿Ÿ(„    0   src/presentation/modern_sheila_cue_sprite_v1.gdc ©7    s      a4AÊµKø²"ÙÑÙz    4   src/presentation/modern_sheila_palm_body_v1.gd.remap€Ÿ©7    F       äÄ÷¨Sí·¢"¹>ÃâåXC    0   src/presentation/modern_sheila_palm_body_v1.gdc àŸ©7    ì      Â¹@-Ì0?fíœ¯M;    4   src/presentation/modern_sheila_palm_mask.gdshader   à±©7    ®      û»ô…\ê/£&Ó"m¾`¨    8   src/presentation/modern_sheila_palm_sprite_v1.gd.remap   µ©7    H       ì,ØçuÅèÈš{Í¾    4   src/presentation/modern_sheila_palm_sprite_v1.gdc    ¶©7    u      şÚ)uî–iÎå×tl·¼    8   src/presentation/modern_sheila_palm_underpaint.gdshader €Ç©7    ¹      =õqw*¯ô1 s`¼x    ,   src/presentation/modern_speech_cues.gd.remap@Ë©7    >       ˆtgx$R eKø	ø°¦%    (   src/presentation/modern_speech_cues.gdc €Ë©7    J      :Şí"·™ŸÏïÛ™”I    4   src/presentation/modern_street12_effects.gd.remap   àÙ©7    C       Ä\€yM›-Ö]B`‡    ,   src/presentation/modern_street12_effects.gdc@Ú©7          ô¨N×é¡Ó<BÈV ÚVV    4   src/presentation/modern_street12_effects.gdshader   `é©7    å      —&WÎúŒ‰~–g¥FÖ    0   src/presentation/modern_street1_effects.gd.remap`ï©7    B       6ïH€{@ç¦á/É    ,   src/presentation/modern_street1_effects.gdc Àï©7    n      R­ÈÆzj‘ àg«Õ›s
+    0   src/presentation/modern_street1_effects.gdshader@ ª7    Ø      «õİÁ‚¾.*šBR¸¿v›     0   src/presentation/modern_street2_rack.gd.remap    ª7    ?       ·OE›¦İõAš{î    (   src/presentation/modern_street2_rack.gdc`ª7    W      îÎˆÛ;— ?lšDMñš    0   src/presentation/modern_street3_effects.gd.remapÀª7    B       ·ÆÒ7R®8àˆ#N    ,   src/presentation/modern_street3_effects.gdc  ª7    ë      í¾Ñ_Ñ_›¶v²—)!@    0   src/presentation/modern_street3_effects.gdshader #ª7    5      .F˜£È¢Ínè÷?iP    0   src/presentation/modern_street5_pigeons.gd.remap`'ª7    B       ¥áÍÁ¿µ]ş˜Gš8    ,   src/presentation/modern_street5_pigeons.gdc À'ª7    H	      ÎîØÙu	/­Æ3,Íû    0   src/presentation/modern_street5_pigeons.gdshader 1ª7    ş	      ÃÎ}$ânÅÌœTB    0   src/presentation/modern_street6_effects.gd.remap ;ª7    B       ŞàyF{ÑúèÛÓMƒñ    ,   src/presentation/modern_street6_effects.gdc €;ª7    w	      ©^ğ<) #|ŠPœ(­½š˜    0   src/presentation/modern_street6_effects.gdshader Eª7    "      o:ÈèL q©¬9<    0   src/presentation/modern_street_travel.gd.remap  @Iª7    @       ´à†âdìâMôèxò    ,   src/presentation/modern_street_travel.gdc   €Iª7    #      Ô£/Ôëë‹¶&áÙ€    ,   src/presentation/modern_susan_body.gd.remap Àbª7    =       u Úµ¿ú °·ü5âd<    (   src/presentation/modern_susan_body.gdc   cª7    %      Gâd§¤<¿Ö`:À
+tëw    0   src/presentation/modern_susan_counter.gdshader  @uª7    ‰       ¢ªö÷iÖĞ Ë˜á    0   src/presentation/modern_susan_face_gaze.gd.remapàuª7    B       (LiAÀ·&pšÈré»¼    ,   src/presentation/modern_susan_face_gaze.gdc @vª7          Ìé-©Èp‰Ë«¹P£Ûñ    0   src/presentation/modern_susan_notebook.gdshader `yª7    ë      —kKØ·º‚«šÏn¤1ù    4   src/presentation/modern_waterfront_effects.gd.remap `{ª7    E       £ã]ûîáMë›Vü    0   src/presentation/modern_waterfront_effects.gdc  À{ª7    È      Lºº—gò
 Ò+³y
-ùÉ    4   src/presentation/modern_waterfront_effects.gdshader €gª7    C      ‹ÑXÂ6?£;ÈÉ$xÎ•Š    ,   src/presentation/opening_sequence.gd.remap  àjª7    <       †¨åGĞıªİà#âÏ*    (   src/presentation/opening_sequence.gdc    kª7    	      § ¦dÑ˜j.]èRuê    4   src/presentation/original_dialogue_overlay.gd.remap @ìª7    E       jhŸìvšPzéUÑ×ó;    0   src/presentation/original_dialogue_overlay.gdc   ìª7    §"      Ñ<˜Ô¯4Wçä¤—Û^    0   src/presentation/original_game_panels.gd.remap  `«7    @       {Ëóô¹t\pE@’ç€Ucª    ,   src/presentation/original_game_panels.gdc    «7    µI      )âÃªÀ_®@ÂÔe’æ»    (   src/presentation/original_menu.gd.remap `Y«7    9       KÌB†Y[ŒKá”µÒr=š    $   src/presentation/original_menu.gdc   Y«7    b      ¦üŞ¼µÕ/Âë½ÜS    0   src/presentation/original_score_button.gd.remap  v«7    A       ŠgˆOŞ£ÄšÀ4À;1    ,   src/presentation/original_score_button.gdc  €v«7    ‚	      î,ÉG^ì€N’æŞ–"&    0   src/presentation/original_zoom_overlay.gd.remap  €«7    A       +rO'0æ„ÂC,º¸KhÔ    ,   src/presentation/original_zoom_overlay.gdc  €€«7    ˆ      w$Á%Œa@”<·¯ü    4   src/presentation/portrait_room_atmosphere.gdshader   «7    ô      
-U„ò [mñ¦v>:Æ`    0   src/presentation/portrait_travel_kit.gd.remap    ’«7    ?       ªX{bÉH€‚iBp›(1    (   src/presentation/portrait_travel_kit.gdc`’«7    Ê      <h³º8ÃDØuí¸“ºô    ,   src/presentation/safe_stage_layout.gd.remap @±«7    =       Iö÷Ù\©3Q¦[wÖY    (   src/presentation/safe_stage_layout.gdc  €±«7    ¯      ñ“8ÕÍ”ğ´î_’µSÂ    (   src/presentation/shell_backdrop.gd.remap@µ«7    :       #‰ù˜4>CÖ4r›ÔãD€    $   src/presentation/shell_backdrop.gdc €µ«7    ~      LhPëÿ¾d½åĞêo“—    (   src/presentation/stage_backdrop.gd.remap ¼«7    :       ®-šĞóš?»pî·c]S&    $   src/presentation/stage_backdrop.gdc @¼«7    n      }œÓôéÆH×W<ø"¥b)    0   src/presentation/street5_vertical_slice.gd.remapÀÇ«7    B       ÿÌ{b
-Ğ'Dô|„q´8    ,   src/presentation/street5_vertical_slice.gdc  È«7    ^	      8	ÆU_‚N ®Kª´ĞıĞ       src/ui/game_localization.gd €Ñ«7    ’$      öÌÀÛ§<EË,·Ñÿ`       src/ui/game_localization.gdc ö«7    K      5¢cyü¶:ª¢æšhñ        src/ui/localized_copy.gd.remap  €¬7    0       q¨râ"ŸvVPiR       src/ui/localized_copy.gdc   À¬7    28      ­_-| ‘Rì% ùÍ        src/ui/native_touch_scroll.gd    J¬7    ä      [dÏ‰şN:$õİ    $   src/ui/retro_flower_stamp.gd.remap   W¬7    4       ×¬§ÄIP#C’ùëU’¹        src/ui/retro_flower_stamp.gdc   @W¬7          šØ²…İ2iH¢ELšªK§        src/ui/theme_factory.gd.remap   àZ¬7    /       àÛ›e“+9ù%ª*ZC·       src/ui/theme_factory.gdc [¬7    2      B½á[™Ö˜ş–\Ü–¦à"       src/ui/web_layout.gd.remap  `q¬7    ,       Òhkã*S§Ï?T·Ê-z       src/ui/web_layout.gdc    q¬7    Ï	      ’Æ³3M6I]7'—š©`ä    $   tools/build_modern_evidence.gd.remap€{¬7    6       JjGİ*X‰µc_7¦        tools/build_modern_evidence.gdc À{¬7    ›      ‹å˜¸Å
+ùÉ    4   src/presentation/modern_waterfront_effects.gdshader  €ª7    C      ‹ÑXÂ6?£;ÈÉ$xÎ•Š    ,   src/presentation/opening_sequence.gd.remap   „ª7    <       †¨åGĞıªİà#âÏ*    (   src/presentation/opening_sequence.gdc   @„ª7    	      § ¦dÑ˜j.]èRuê    4   src/presentation/original_dialogue_overlay.gd.remap `«7    E       jhŸìvšPzéUÑ×ó;    0   src/presentation/original_dialogue_overlay.gdc  À«7    §"      Ñ<˜Ô¯4Wçä¤—Û^    0   src/presentation/original_game_panels.gd.remap  €(«7    @       {Ëóô¹t\pE@’ç€Ucª    ,   src/presentation/original_game_panels.gdc   À(«7    µI      )âÃªÀ_®@ÂÔe’æ»    (   src/presentation/original_menu.gd.remap €r«7    9       KÌB†Y[ŒKá”µÒr=š    $   src/presentation/original_menu.gdc  Àr«7    b      ¦üŞ¼µÕ/Âë½ÜS    0   src/presentation/original_score_button.gd.remap @«7    A       ŠgˆOŞ£ÄšÀ4À;1    ,   src/presentation/original_score_button.gdc   «7    ‚	      î,ÉG^ì€N’æŞ–"&    0   src/presentation/original_zoom_overlay.gd.remap @™«7    A       +rO'0æ„ÂC,º¸KhÔ    ,   src/presentation/original_zoom_overlay.gdc   ™«7    ˆ      w$Á%Œa@”<·¯ü    4   src/presentation/portrait_room_atmosphere.gdshader  @§«7    ô      
+U„ò [mñ¦v>:Æ`    0   src/presentation/portrait_travel_kit.gd.remap   @««7    ?       ªX{bÉH€‚iBp›(1    (   src/presentation/portrait_travel_kit.gdc€««7    Ê      <h³º8ÃDØuí¸“ºô    ,   src/presentation/safe_stage_layout.gd.remap `Ê«7    =       Iö÷Ù\©3Q¦[wÖY    (   src/presentation/safe_stage_layout.gdc   Ê«7    ¯      ñ“8ÕÍ”ğ´î_’µSÂ    (   src/presentation/shell_backdrop.gd.remap`Î«7    :       #‰ù˜4>CÖ4r›ÔãD€    $   src/presentation/shell_backdrop.gdc  Î«7    ~      LhPëÿ¾d½åĞêo“—    (   src/presentation/stage_backdrop.gd.remap Õ«7    :       ®-šĞóš?»pî·c]S&    $   src/presentation/stage_backdrop.gdc `Õ«7    n      }œÓôéÆH×W<ø"¥b)    0   src/presentation/street5_vertical_slice.gd.remapàà«7    B       ÿÌ{b
+Ğ'Dô|„q´8    ,   src/presentation/street5_vertical_slice.gdc @á«7    ^	      8	ÆU_‚N ®Kª´ĞıĞ       src/ui/game_localization.gd  ê«7    ’$      öÌÀÛ§<EË,·Ñÿ`       src/ui/game_localization.gdc@¬7    K      5¢cyü¶:ª¢æšhñ        src/ui/localized_copy.gd.remap   *¬7    0       q¨râ"ŸvVPiR       src/ui/localized_copy.gdc   à*¬7    28      ­_-| ‘Rì% ùÍ        src/ui/native_touch_scroll.gd    c¬7    ä      [dÏ‰şN:$õİ    $   src/ui/retro_flower_stamp.gd.remap   p¬7    4       ×¬§ÄIP#C’ùëU’¹        src/ui/retro_flower_stamp.gdc   `p¬7          šØ²…İ2iH¢ELšªK§        src/ui/theme_factory.gd.remap    t¬7    /       àÛ›e“+9ù%ª*ZC·       src/ui/theme_factory.gdc@t¬7    2      B½á[™Ö˜ş–\Ü–¦à"       src/ui/web_layout.gd.remap  €Š¬7    ,       Òhkã*S§Ï?T·Ê-z       src/ui/web_layout.gdc   ÀŠ¬7    Ï	      ’Æ³3M6I]7'—š©`ä    $   tools/build_modern_evidence.gd.remap ”¬7    6       JjGİ*X‰µc_7¦        tools/build_modern_evidence.gdc à”¬7    ›      ‹å˜¸Å
 ğhpÈ­è™    

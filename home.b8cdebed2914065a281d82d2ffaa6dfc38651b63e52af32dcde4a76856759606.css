@@ -1,0 +1,130 @@
+.julia-home {
+  --home-cream: #ffe8b3; --home-coral: #ed694b; --home-ink: #161c2a;
+  --home-x: 0px; --home-y: 0px; --selection-x: 0px; --selection-y: 0px;
+  position: fixed; inset: 0; z-index: 40; isolation: isolate; overflow: hidden;
+  color: var(--home-cream); background: #14213b; font-family: Georgia, HomeNoto, 'Times New Roman', serif;
+}
+.julia-home[hidden], .julia-home [hidden] { display: none !important; }
+.julia-home *, .julia-home *::before, .julia-home *::after { box-sizing: border-box; }
+.julia-home button, .julia-home select { font: inherit; color: inherit; }
+.julia-home button { min-width: 44px; min-height: 44px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.julia-home button:disabled, .julia-home select:disabled { cursor: wait; }
+.julia-home button:focus-visible, .julia-home select:focus-visible { outline: 3px solid #fff1ca; outline-offset: 4px; }
+.julia-home__world { position: absolute; overflow: hidden; transform: translate(calc(var(--home-x) * .4), calc(var(--home-y) * .4)); transition: transform .7s ease-out; }
+.julia-home__background, .julia-home__portrait-background { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; }
+.julia-home__portrait-background { display: none; }
+.julia-home[data-background-mode="graphic"] .julia-home__background, .julia-home[data-background-mode="graphic"] .julia-home__portrait-background { display: none; }
+.julia-home .julia-home__actor { position: absolute; z-index: 2; object-fit: contain; background: transparent; pointer-events: none; touch-action: auto; }
+.julia-home__wash { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(90deg, #0e192740 0, transparent 42%), linear-gradient(0deg, #1118274a, transparent 23%); }
+.julia-home__heading { position: absolute; z-index: 4; left: 7.8%; top: 15.5%; width: 25%; max-width: 420px; text-align: center; }
+.julia-home__title-line { position: relative; }
+.julia-home .julia-home__heading h1 { margin: 0; color: var(--home-cream); font: italic 700 clamp(75px, 8vw, 136px)/.89 Georgia, HomeNoto, 'Times New Roman', serif; letter-spacing: -.065em; text-transform: uppercase; text-shadow: 0 3px 2px #1720346b; }
+.julia-home__signature { margin: 6px -5% 0; color: var(--home-cream); font: italic 600 clamp(27px, 2.8vw, 45px)/1.05 Georgia, HomeNoto, 'Times New Roman', serif; letter-spacing: -.045em; }
+.julia-home__title-flower { position: absolute; left: calc(50% - 14px); bottom: -86px; width: 28px; color: #ef795b; }
+.julia-home__title-flower svg, .julia-home__selection svg { display: block; width: 100%; height: 100%; }
+.julia-home__heading::after { content: ''; display: block; width: 65%; height: 14px; margin: 12px auto 0; border-bottom: 2px solid #f8e0acbd; border-radius: 50%; }
+.julia-home__subtitle { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.julia-home__controls { position: absolute; z-index: 4; left: 8%; top: 42%; width: 22%; max-width: 365px; max-height: 35%; padding: 5px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #ffe8b350 transparent; }
+.julia-home__menu { position: relative; display: grid; gap: 12px; }
+.julia-home__item { position: relative; width: 100%; min-height: 58px; padding: 7px 21px 10px; border: 1.5px solid #ffe8b3df; border-radius: 999px; background: #171e29b5; text-align: center; font-size: clamp(25px, 2.15vw, 36px) !important; font-weight: 600 !important; line-height: 1.13; text-shadow: 0 1px 2px #0009; box-shadow: inset 0 0 18px #ffe2ad08, 0 3px 9px #0002; transition: background .2s ease, box-shadow .2s ease, transform .2s ease; }
+.julia-home__item[data-primary="true"] { border-color: #ffe7b4; background: linear-gradient(160deg, #f67b56, #d94e35); box-shadow: 0 0 14px #ff7d4e45, inset 0 1px 1px #fff6cf5c; }
+.julia-home__item:hover, .julia-home__item:focus-visible { background: #493b43de; box-shadow: 0 0 14px #ffe1a633, inset 0 0 12px #ffe8b31a; transform: translateY(-1px); }
+.julia-home__item[data-primary="true"]:hover, .julia-home__item[data-primary="true"]:focus-visible { background: linear-gradient(160deg, #ff9068, #e05b40); box-shadow: 0 0 21px #ff92645e; }
+.julia-home__item:disabled { opacity: .56; transform: none; }
+.julia-home__selection { position: absolute; z-index: 2; top: 0; inset-inline-start: 12px; width: 16px; height: 16px; color: #ffe7b6; pointer-events: none; opacity: 0; transform: translate(var(--selection-x), var(--selection-y)) translateY(7px); transition: transform .24s ease, opacity .2s ease; }
+.julia-home__menu:focus-within .julia-home__selection, .julia-home__menu:has(.julia-home__item:hover) .julia-home__selection { opacity: .85; }
+.julia-home__languages { margin-top: 10px; padding: 10px 14px; border: 1px solid #e9cf9d; border-radius: 14px; background: #172439f5; }
+.julia-home__languages label { display: grid; gap: 7px; font: 13px/1.4 HomeNoto, system-ui, sans-serif; }
+.julia-home__languages select { min-height: 44px; width: 100%; border: 1px solid #c7b58d; border-radius: 7px; padding: 6px 10px; color: #ffedc6; background: #26354a; font: 16px/1.2 HomeNoto, system-ui, sans-serif; }
+.julia-home__tools { position: absolute; z-index: 4; left: 8%; top: 86%; width: 22%; max-width: 365px; display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+.julia-home__edition { display: flex; flex-wrap: nowrap; gap: 8px; align-items: center; font: 11px/1.2 HomeNoto, system-ui, sans-serif; }
+.julia-home__edition > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.julia-home__edition button { min-height: 44px; padding: 4px 1px; border: 0; border-bottom: 1px solid transparent; color: #f3dfb9b0; background: transparent; }
+.julia-home__edition button[aria-pressed="true"] { color: #fff0c9; border-bottom-color: #ef947a; }
+.julia-home__fullscreen { display: grid; place-items: center; width: 44px; min-height: 44px; flex-shrink: 0; padding: 0; border: 0; background: transparent; font: 27px/1 system-ui, sans-serif !important; }
+.julia-home__fullscreen [data-copy="fullscreen"] { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.julia-home__date { position: absolute; z-index: 4; left: 8%; top: 78%; width: 22%; max-width: 365px; padding: 7px 0; border: 0; background: transparent; color: #ffe8b3; font: 500 11px/1.35 HomeNoto, system-ui, sans-serif !important; letter-spacing: .18em; text-transform: uppercase; text-align: center; }
+.julia-home__date::before, .julia-home__date::after { content: '—'; margin: 0 6px; opacity: .8; }
+.julia-home__date:hover { color: #fff9e9; text-shadow: 0 0 8px #ffb879; }
+.julia-home__loading { display: grid; gap: 7px; margin: 12px 8px 0; color: #ffe7bf; font: 12px/1.35 HomeNoto, system-ui, sans-serif; text-align: center; }
+.julia-home__loading progress { width: 100%; height: 4px; accent-color: #ef8b66; }
+.julia-home__reflection-target, .julia-home__message-target { position: absolute; z-index: 3; min-width: 44px; min-height: 44px; padding: 0; border: 0; background: transparent; }
+.julia-home__reflection-target { z-index: 1; clip-path: polygon(0 0, 100% 4%, 100% 96%, 0 100%); }
+.julia-home .julia-home__reflection { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: transparent; opacity: .23; pointer-events: none; }
+.julia-home__reflection-target > span { position: absolute; right: 1px; bottom: 3px; color: #ffe8b3; font-size: 21px; opacity: 0; transition: opacity .2s ease; }
+.julia-home__reflection-target:hover > span, .julia-home__reflection-target:focus-visible > span { opacity: 1; }
+.julia-home--reflection-fading .julia-home__reflection { animation: street-reflection 2.6s ease-in-out both; }
+.julia-home__message-target { opacity: .72; transition: opacity .2s ease; }
+.julia-home__message-target > span { position: absolute; left: 7px; right: 7px; top: 11px; bottom: 11px; border: 1px solid #9d7c4e; border-radius: 1px; background: #dec8a0; box-shadow: 1px 2px 3px #16202b70; transform: rotate(-7deg); }
+.julia-home__message-target > span::before { content: ''; position: absolute; inset: 0; background: #f3e4c5; clip-path: polygon(0 0, 100% 0, 50% 58%); }
+.julia-home__message-target > span::after { content: ''; position: absolute; left: calc(50% - 2px); top: 45%; width: 4px; height: 4px; border-radius: 50%; background: #9b615e; }
+.julia-home__message-target:hover, .julia-home__message-target:focus-visible { opacity: 1; }
+.julia-home__secret { position: absolute; z-index: 8; right: 6%; bottom: 10%; width: min(355px, 42%); padding: 17px 48px 17px 20px; border: 1px solid #f2d9a8; border-radius: 12px; color: #ffedcb; background: #17213aef; box-shadow: 0 8px 30px #0005; font: 16px/1.55 HomeNoto, system-ui, sans-serif; text-align: start; }
+.julia-home__secret p { margin: 6px 0; }
+.julia-home__secret p + p { color: #ffc3a9; padding-top: 8px; border-top: 1px solid #ffe8b338; }
+.julia-home__secret-close { position: absolute; top: 1px; right: 1px; width: 44px; height: 44px; padding: 0; border: 0; background: transparent; color: #ffe8b3; font: 24px/1 system-ui, sans-serif !important; }
+.julia-home--entered .julia-home__heading { animation: street-arrive .65s ease-out both; }
+.julia-home--entered .julia-home__item { animation: street-arrive .55s ease-out backwards; }
+.julia-home--entered .julia-home__item:nth-of-type(1) { animation-delay: .08s; }
+.julia-home--entered .julia-home__item:nth-of-type(2) { animation-delay: .14s; }
+.julia-home--entered .julia-home__item:nth-of-type(3) { animation-delay: .2s; }
+.julia-home--entered .julia-home__item:nth-of-type(4) { animation-delay: .26s; }
+.julia-home[data-large-text="true"] .julia-home__item { min-height: 62px; font-size: clamp(29px, 2.55vw, 40px) !important; }
+.julia-home[data-high-contrast="true"] .julia-home__item { background-color: #101b2c; border-width: 2px; }
+.julia-home[data-high-contrast="true"] .julia-home__tools { background: #101b2ccc; border-radius: 8px; }
+@keyframes street-arrive { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes street-reflection { 0%, 12%, 100% { opacity: .23; } 40%, 65% { opacity: .015; } }
+@media (max-height: 580px) and (orientation: landscape) {
+  .julia-home__heading { top: 6%; width: 29%; left: max(5%, calc(env(safe-area-inset-left) + 8px)); }
+  .julia-home .julia-home__heading h1 { font-size: 65px; }
+  .julia-home__signature { font-size: 25px; }
+  .julia-home__title-flower, .julia-home__heading::after { display: none; }
+  .julia-home__controls { left: 5%; top: 36%; width: 29%; max-height: min(52%, calc(64% - env(safe-area-inset-bottom) - 48px)); }
+  .julia-home__menu { gap: 6px; }
+  .julia-home__item { min-height: 44px; padding-block: 5px; font-size: 23px !important; }
+  .julia-home__tools { left: 37%; top: auto; bottom: max(2%, env(safe-area-inset-bottom)); width: auto; }
+  .julia-home__date { left: max(5%, env(safe-area-inset-left)); top: auto; bottom: env(safe-area-inset-bottom); width: 29%; font-size: 9px !important; letter-spacing: .08em; }
+  .julia-home__secret { right: max(3%, env(safe-area-inset-right)); bottom: 6%; width: 46%; font-size: 14px; }
+}
+@media (orientation: portrait) {
+  .julia-home[data-portrait-ready="true"] .julia-home__portrait-background { display: block; }
+  .julia-home[data-portrait-ready="true"] .julia-home__background { display: none; }
+  .julia-home__wash { background: linear-gradient(180deg, #10203c1a, transparent 21%), linear-gradient(0deg, #11182740, transparent 32%); }
+  .julia-home__heading { left: 7%; top: max(3.5%, calc(env(safe-area-inset-top) + 12px)); width: 86%; max-width: none; }
+  .julia-home .julia-home__heading h1 { font-size: clamp(55px, 17vw, 78px); }
+  .julia-home__signature { margin-top: 4px; font-size: 28px; }
+  .julia-home__title-flower { width: 21px; left: calc(50% - 10px); bottom: -63px; }
+  .julia-home__heading::after { height: 8px; margin-top: 8px; width: 57%; }
+  .julia-home__tools { left: 7%; right: 7%; top: max(18.5%, calc(env(safe-area-inset-top) + 120px)); width: auto; max-width: none; gap: 10px; }
+  .julia-home__edition { gap: 10px; font-size: 11px; }
+  .julia-home__controls { left: 13%; top: auto; bottom: calc(max(8px, env(safe-area-inset-bottom)) + 56px); width: 74%; max-width: none; max-height: 35%; padding: 5px; }
+  .julia-home__menu { gap: 7px; }
+  .julia-home__item { min-height: 44px; padding: 6px 16px 8px; font-size: 25px !important; }
+  .julia-home__date { left: 8%; top: auto; bottom: max(4px, env(safe-area-inset-bottom)); width: 84%; max-width: none; min-height: 44px; font-size: 10px !important; letter-spacing: .16em; }
+  .julia-home__date::before, .julia-home__date::after { content: ''; margin: 0; }
+  .julia-home__languages { font-size: 13px; }
+  .julia-home__loading { font-size: 11px; margin-top: 9px; }
+  .julia-home__secret { top: 31%; left: 6%; right: 6%; bottom: auto; width: auto; font-size: 15px; }
+  .julia-home[data-large-text="true"] .julia-home__item { min-height: 48px; font-size: 28px !important; }
+}
+@media (max-height: 700px) and (orientation: portrait) {
+  .julia-home .julia-home__heading h1 { font-size: 46px; }
+  .julia-home__signature, .julia-home__heading::after, .julia-home__title-flower { display: none; }
+  .julia-home__tools { top: max(18%, calc(env(safe-area-inset-top) + 48px)); }
+  .julia-home__controls { left: 8%; width: 84%; max-height: 40%; }
+  .julia-home__menu { grid-template-columns: 1fr 1fr; gap: 5px 8px; }
+  .julia-home__item { min-height: 44px; font-size: 18px !important; padding-inline: 9px; }
+  .julia-home__item[data-action="new_game"], .julia-home__item[data-action="continue"] { grid-column: 1 / -1; font-size: 24px !important; }
+  .julia-home[data-large-text="true"] .julia-home__item { font-size: 20px !important; }
+  .julia-home[data-large-text="true"] .julia-home__item[data-action="new_game"], .julia-home[data-large-text="true"] .julia-home__item[data-action="continue"] { font-size: 27px !important; }
+}
+@media (max-width: 360px) and (orientation: portrait) {
+  .julia-home__menu { grid-template-columns: 1fr; }
+}
+.julia-home[data-reduced-motion="true"] *, .julia-home[data-reduced-motion="true"] *::before, .julia-home[data-reduced-motion="true"] *::after { animation: none !important; transition: none !important; }
+.julia-home[data-reduced-motion="true"] .julia-home__world { transform: none; }
+.julia-home[data-reduced-motion="true"].julia-home--reflection-fading .julia-home__reflection { opacity: .025; }
+@media (prefers-reduced-motion: reduce) {
+  .julia-home *, .julia-home *::before, .julia-home *::after { animation: none !important; transition: none !important; }
+  .julia-home__world { transform: none; }
+}

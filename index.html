@@ -3,15 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#faf3df">
+  <meta name="theme-color" content="#111722">
   <meta name="robots" content="noindex,nofollow">
   <title>Julia · Flower Girl</title>
   <link rel="icon" type="image/svg+xml" href="favicon.6764402d603a65a5a097aefb24d266dfab5ce994772d485a49e2b48935a3cc0e.svg">
   <link rel="alternate icon" type="image/png" sizes="32x32" href="favicon-32.3c5c44b4fde56d27acfe7aede234017de86cade4fb716262feb5087f8c8fecf9.png">
   <link rel="apple-touch-icon" sizes="180x180" href="touch-icon.fca8d649b169fe08a74e50943a3b696d268728a7121f96445e369dd749bdbb5b.png">
-  <link rel="preload" href="menu-art.04edf4288cc53fa2f1ca70f905ac0ab4a8354a58dce0e8fec2185ddda1594788.png" as="image" fetchpriority="high">
+  <link rel="preload" href="menu-art.884a1e57454db7db65adc6570e28a0bfd7db197445889f472828aac5a9943db9.png" as="image" media="(orientation: landscape)" fetchpriority="high">
+  <link rel="preload" href="home-backgroundPortrait.653e6b5e00f9cd8000ae86e4e2b1aee4d2959b21e13c42fd1d8fa841b417c381.png" as="image" media="(orientation: portrait)" fetchpriority="high">
   <style>
     @font-face { font-family: JuliaDisplay; src: url('menu-font.2ba02e68b152868aef9ba28e24b3648c7d457fe6f25c761f2c2c53fb61a73fc8.ttf') format('truetype'); font-weight: 300 700; font-display: swap; }
+    @font-face { font-family: Caveat; src: url('home-fontHand.0bdb6b660482d31531b3945849fba5916b3ef8695da7024a9e6b9ee3c4157988.ttf') format('truetype'); font-weight: 400 700; font-display: swap; }
+    @font-face { font-family: HomeNoto; src: url('home-fontBody.bfb7bb691513f12e734dc346c03a03f784912432d7e3fa8e56efcf906fe86b3d.ttf') format('truetype'); font-weight: 100 900; font-display: swap; }
     :root { font-family: JuliaDisplay, system-ui, sans-serif; background: #faf3df; color: #493126; color-scheme: light; }
     * { box-sizing: border-box; }
     html, body, #stage { margin: 0; width: 100%; height: 100%; overflow: hidden; }
@@ -26,14 +29,14 @@
     #stage:fullscreen { width: 100vw; height: 100dvh; background: #000; }
     #stage:-webkit-full-screen { width: 100vw; height: 100vh; background: #000; }
     canvas { display: block; width: 100%; height: 100%; background: #faf3df; touch-action: none; outline: none; }
-    #loading { position: absolute; inset: 0; isolation: isolate; overflow: hidden; background: #faf3df; }
-    /* One original photograph/illustration, without filters or image animation. */
+    #loading { position: absolute; inset: 0; isolation: isolate; overflow: hidden; background: #111722; }
+    #loading::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, #0b13256e, transparent 50%); pointer-events: none; }
     .menu-art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; }
-    .intro { position: absolute; left: clamp(24px, 3.75vw, 48px); top: 64px; bottom: 40px; width: min(380px, 43%); display: flex; flex-direction: column; justify-content: space-between; gap: 28px; overflow-y: auto; overscroll-behavior: contain; padding: 0 6px 6px; text-align: start; }
+    .intro { position: absolute; z-index: 1; left: clamp(24px, 7vw, 110px); top: 12%; bottom: 12%; width: min(380px, 32%); display: flex; flex-direction: column; justify-content: space-between; gap: 28px; overflow-y: auto; overscroll-behavior: contain; padding: 0 6px 6px; text-align: start; }
     .intro-heading, .loading-block { flex-shrink: 0; }
-    h1 { font-size: clamp(60px, 7vw, 80px); font-weight: 700; line-height: 1.1; letter-spacing: -.025em; margin: 0; color: #84284e; }
-    .subtitle { font-size: clamp(16px, 1.65vw, 21px); line-height: 1.5; margin: 13px 0 0; color: #493126; }
-    #status { font-size: 16px; line-height: 1.45; margin: 0 0 11px; color: #24564e; text-shadow: 0 0 3px #fff9ec, 0 0 6px #fff9ec; }
+    h1 { font-family: Georgia, JuliaDisplay, serif; font-style: italic; font-size: clamp(60px, 7vw, 104px); font-weight: 700; line-height: 1.1; letter-spacing: -.025em; margin: 0; color: #fff0c4; text-shadow: 0 2px 12px #11172288; }
+    .subtitle { font-size: clamp(16px, 1.65vw, 21px); line-height: 1.5; margin: 13px 0 0; color: #fff0c4; }
+    #status { font-size: 16px; line-height: 1.45; margin: 0 0 11px; color: #fff0c4; text-shadow: 0 2px 8px #111722; }
     .loading-state { display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: 13px; }
     .loading-flower { display: block; width: 40px; height: 40px; object-fit: contain; }
     .loading-flower--static { display: none; }
@@ -41,14 +44,15 @@
     body[data-state="error"] .loading-flower--static { display: block; }
     progress { display: block; width: 100%; height: 5px; border: 0; border-radius: 8px; overflow: hidden; background: #dfd7c3; accent-color: #267c78; }
     progress::-webkit-progress-bar { background: #dfd7c3; border-radius: 8px; }
-    progress::-webkit-progress-value { background: linear-gradient(90deg, #267c78, #69bbab); border-radius: 8px; }
-    progress::-moz-progress-bar { background: linear-gradient(90deg, #267c78, #69bbab); border-radius: 8px; }
+    progress::-webkit-progress-value { background: linear-gradient(90deg, #db533e, #f8bc74); border-radius: 8px; }
+    progress::-moz-progress-bar { background: linear-gradient(90deg, #db533e, #f8bc74); border-radius: 8px; }
     #retry { min-width: 120px; min-height: 44px; margin: 16px 0 0; padding: 8px 20px; border: 1px solid #267c78; border-radius: 13px; background: #267c78; color: #fff9e8; font: 600 18px JuliaDisplay, sans-serif; cursor: pointer; }
     #retry:hover { background: #1e6965; }
     #retry:focus-visible { outline: 3px solid #ba3464; outline-offset: 3px; }
     @media (orientation: portrait) {
-      .menu-art { height: 42%; object-fit: cover; object-position: center; }
-      .intro { left: 16px; right: 16px; top: calc(42% + 12px); bottom: max(24px, env(safe-area-inset-bottom)); width: auto; gap: 24px; }
+      #loading::after { background: linear-gradient(180deg, #1117223d, transparent 35%, #111722bb 100%); }
+      .menu-art { height: 100%; object-fit: cover; object-position: center; }
+      .intro { left: max(24px, env(safe-area-inset-left)); right: max(24px, env(safe-area-inset-right)); top: max(24px, env(safe-area-inset-top)); bottom: max(36px, env(safe-area-inset-bottom)); width: auto; gap: 24px; text-align: center; }
       h1 { font-size: clamp(50px, 16vw, 68px); }
       .subtitle { font-size: 17px; margin-top: 8px; }
     }
@@ -73,17 +77,18 @@
       h1, .subtitle, #status { text-shadow: 0 0 3px #fff9ec, 0 0 6px #fff9ec; }
     }
   </style>
+  <link rel="stylesheet" href="home.b8cdebed2914065a281d82d2ffaa6dfc38651b63e52af32dcde4a76856759606.css">
 </head>
 <body data-state="loading">
   <header id="language-bar"><strong id="game-brand">Julia</strong><label><span id="language-label">שפה</span><select id="game-language" aria-label="שפה"></select></label></header>
   <main id="stage">
     <canvas id="canvas" tabindex="0" aria-label="Julia Flower Girl game">הדפדפן הזה אינו תומך במשחק.</canvas>
     <section id="loading" aria-label="טעינת המשחק">
-      <img class="menu-art" src="menu-art.04edf4288cc53fa2f1ca70f905ac0ab4a8354a58dce0e8fec2185ddda1594788.png" alt="" fetchpriority="high" aria-hidden="true">
+      <picture aria-hidden="true"><source media="(orientation: portrait)" srcset="home-backgroundPortrait.653e6b5e00f9cd8000ae86e4e2b1aee4d2959b21e13c42fd1d8fa841b417c381.png"><img class="menu-art" src="menu-art.884a1e57454db7db65adc6570e28a0bfd7db197445889f472828aac5a9943db9.png" alt="" fetchpriority="high" onerror="this.onerror=null;this.parentElement.querySelector('source')?.remove();this.src='menu-art.884a1e57454db7db65adc6570e28a0bfd7db197445889f472828aac5a9943db9.png'"></picture>
       <div class="intro">
         <div class="intro-heading">
           <h1 id="loading-title">ג׳וליה</h1>
-          <p class="subtitle" id="loading-subtitle">סן פרנסיסקו, 1967. הזמן נשבר.</p>
+          <p class="subtitle" id="loading-subtitle">סן פרנסיסקו · 1967</p>
         </div>
         <div class="loading-block">
           <div class="loading-state">
@@ -100,8 +105,9 @@
     </section>
   </main>
   <noscript>כדי לשחק יש לאפשר JavaScript בדפדפן.</noscript>
-  <script id="game-config" type="application/json">{"args":[],"canvasResizePolicy":0,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"engine/ca3fabd9a9157fce7c0dec3dd5dda878cf01f50b/index","experimentalVK":true,"fileSizes":{"engine/ca3fabd9a9157fce7c0dec3dd5dda878cf01f50b/index.wasm":39513091,"engine/ca3fabd9a9157fce7c0dec3dd5dda878cf01f50b/index.pck":937074684},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4,"mainPack":"engine/ca3fabd9a9157fce7c0dec3dd5dda878cf01f50b/index.pck","serviceWorker":"","persistentPaths":["/userfs"]}</script>
-  <script id="web-config" type="application/json">{"commit":"ca3fabd9a9157fce7c0dec3dd5dda878cf01f50b","engine":"engine/ca3fabd9a9157fce7c0dec3dd5dda878cf01f50b/index.js","manifest":"game-manifest.cc0b61b4b6927476fe29065910107b7e8ace82e89dff6f30e6471b0fbdb89b4d.json","total_bytes":976587775}</script>
-  <script type="module" src="player.b6b1b5ad1733f35143d4f1096cb5493223b1dcf5109005163d109a6bd6890f20.mjs"></script>
+  <script id="game-config" type="application/json">{"args":[],"canvasResizePolicy":0,"emscriptenPoolSize":8,"ensureCrossOriginIsolationHeaders":false,"executable":"engine/a705694d990407a52a635a6076ef4f3571783190/index","experimentalVK":true,"fileSizes":{"engine/a705694d990407a52a635a6076ef4f3571783190/index.wasm":39513091,"engine/a705694d990407a52a635a6076ef4f3571783190/index.pck":937081116},"focusCanvas":true,"gdextensionLibs":[],"godotPoolSize":4,"mainPack":"engine/a705694d990407a52a635a6076ef4f3571783190/index.pck","serviceWorker":"","persistentPaths":["/userfs"]}</script>
+  <script id="web-config" type="application/json">{"commit":"a705694d990407a52a635a6076ef4f3571783190","engine":"engine/a705694d990407a52a635a6076ef4f3571783190/index.js","manifest":"game-manifest.be90dd0e60c516bedd93c694c8d432077d19b6022450dac25b7e861d8db6a872.json","total_bytes":976594207}</script>
+  <script id="home-config" type="application/json">{"backgroundMode":"image","assets":{"background":"menu-art.884a1e57454db7db65adc6570e28a0bfd7db197445889f472828aac5a9943db9.png","backgroundPortrait":"home-backgroundPortrait.653e6b5e00f9cd8000ae86e4e2b1aee4d2959b21e13c42fd1d8fa841b417c381.png","standingAtlas":"home-standingAtlas.1fea26bcec17e503d060c36b780af0833b5794ed9eedccc8ed88c39e744f2c39.png","mel":"home-mel.28301092744013c2d3b5cfbd6b7a115ca06004a6e377e831bbdb8479a1cc463d.png","fontHand":"home-fontHand.0bdb6b660482d31531b3945849fba5916b3ef8695da7024a9e6b9ee3c4157988.ttf","fontBody":"home-fontBody.bfb7bb691513f12e734dc346c03a03f784912432d7e3fa8e56efcf906fe86b3d.ttf"},"registration":{"head":[180,3,153,138],"eyes":[239,52,73,39],"offsets":{"1":[30,1],"2":[0,0],"3":[30,1]},"feather":2,"neckFade":[119,141]}}</script>
+  <script type="module" src="player.e5cab388965b8b28f47f7d655dc62fbcd4f4de223a012d0acd4136c299313f96.mjs"></script>
 </body>
 </html>

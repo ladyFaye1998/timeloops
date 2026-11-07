@@ -1,6 +1,6 @@
 import { installChunkFetch } from './chunk-fetch.5db43716d7a11a9b9c2b75a2ec4e8cf37bcd11454bcb1573c860c0b38619e9ca.mjs';
 import { installAudioUnlock } from './audio-unlock.dfc0ba3caa3f4dbaca0bc6b570f0b5dd5df98b2b202b9aaf6d593089605f275e.mjs';
-import { installLanguagePicker } from './languages.758b50e42056d9a4b99e79e1dd637c43fe961b60f11d4170860a60e7b8a189cd.mjs';
+import { installLanguagePicker } from './languages.bdc77e3ff797c87d3c9eb9ef28f1e34d03be2a6a4b256fafa1df20897a07ad8b.mjs';
 
 const config = JSON.parse(document.getElementById('game-config').textContent);
 const boot = JSON.parse(document.getElementById('web-config').textContent);
@@ -13,6 +13,15 @@ const retry = document.getElementById('retry');
 let failed = false;
 const language = installLanguagePicker();
 installAudioUnlock();
+// The animated home is optional presentation. A failed asset/module must never
+// prevent the original game's automatic startup or native menu fallback.
+const homeConfig = document.getElementById('home-config');
+if (homeConfig) {
+  void import('./home.134c538556670e4de9a499fe4715c4b67679c104a13e83b23fea1047bdbc3d67.mjs').then(({ installHomeMenu }) => {
+    const home = installHomeMenu({ canvas, stage, config: JSON.parse(homeConfig.textContent) });
+    return home?.ready;
+  }).catch(error => console.warn('Animated home unavailable; native menu remains available:', error?.message || String(error)));
+}
 
 function resizeCanvas() {
   const rect = stage.getBoundingClientRect();
