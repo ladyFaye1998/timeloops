@@ -8,7 +8,7 @@ const COPY = {
   fr: ['Langue', 'Julia', 'San Francisco, 1967. Le temps est déréglé.', 'Chargement…', 'Ouverture du jeu…', 'Le jeu n’a pas pu démarrer. Réessayez.', 'Réessayer', 'Jeu Julia'],
   de: ['Sprache', 'Julia', 'San Francisco, 1967. Die Zeit ist aus den Fugen.', 'Wird geladen…', 'Das Spiel wird geöffnet…', 'Das Spiel konnte nicht geöffnet werden. Bitte versuche es erneut.', 'Erneut versuchen', 'Julia Zeitreise-Spiel'],
   pl: ['Język', 'Julia', 'San Francisco, 1967. Czas się załamał.', 'Wczytywanie…', 'Uruchamianie gry…', 'Nie udało się uruchomić gry. Spróbuj ponownie.', 'Spróbuj ponownie', 'Gra Julia'],
-  ru: ['Язык', 'Джулия', 'Сан-Франциско, 1967. Время нарушено.', 'Загрузка…', 'Запуск игры…', 'Не удалось запустить игру. Попробуйте ещё раз.', 'Повторить', 'Игра «Приключения Джулии»'],
+  ru: ['Язык', 'Джулия', 'Сан-Франциско, 1967. Время дало трещину.', 'Загрузка…', 'Запуск игры…', 'Не удалось запустить игру. Попробуйте ещё раз.', 'Повторить', 'Игра «Приключения Джулии»'],
   cs: ['Jazyk', 'Katka', 'San Francisco, 1967. Čas se porouchal.', 'Načítání…', 'Spouštění hry…', 'Hru se nepodařilo spustit. Zkuste to znovu.', 'Zkusit znovu', 'Hra Katka pátrá v minulosti'],
   nl: ['Taal', 'Julia', 'San Francisco, 1967. De tijd is ontregeld.', 'Laden…', 'Het spel wordt geopend…', 'Het spel kon niet worden geopend. Probeer het opnieuw.', 'Opnieuw proberen', 'Julia Sweet Sixties'],
 };

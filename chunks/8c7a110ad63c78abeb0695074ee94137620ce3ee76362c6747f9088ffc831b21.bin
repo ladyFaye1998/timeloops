@@ -122793,7 +122793,6 @@ var _header_controls: HBoxContainer
 var _header_spacer: Control
 var _body: Control
 var _menu_art: TextureRect
-var _menu_tint: ColorRect
 var _menu_primary_action: Button
 var _menu_secondary_action: Button
 var _stage_card: Panel
@@ -123064,24 +123063,6 @@ func _build_menu_background() -> void:
 	_menu_art.texture = _load_texture(MENU_IMAGE_PATH)
 	_menu_art.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_body.add_child(_menu_art)
-
-	_menu_tint = ColorRect.new()
-	_menu_tint.color = Color.WHITE
-	var menu_shader := Shader.new()
-	menu_shader.code = """
-shader_type canvas_item;
-uniform bool portrait = false;
-void fragment() {
-	float paper = 1.0 - smoothstep(0.22, 0.55, UV.x);
-	float opacity = portrait ? smoothstep(0.10, 0.40, UV.y) : paper * 0.60;
-	COLOR = vec4(0.973, 0.929, 0.812, opacity);
-}
-"""
-	var menu_material := ShaderMaterial.new()
-	menu_material.shader = menu_shader
-	_menu_tint.material = menu_material
-	_menu_tint.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_body.add_child(_menu_tint)
 
 
 func _build_stage() -> void:
@@ -123982,20 +123963,22 @@ func _rebuild_side_content() -> void:
 
 
 func _build_menu_content() -> void:
-	# The title and controls share one axis over the existing illustrated fade.
+	# Poster typography and a compact action column sit directly over the scene.
 	var top_space := Control.new()
 	top_space.name = "MenuTopSpace"
-	top_space.custom_minimum_size.y = 48.0
+	top_space.custom_minimum_size.y = 0.0
+	top_space.visible = false
 	_side_content.add_child(top_space)
 
-	var title := _make_label(_copy("menu_title"), 88 if _locale == "he" else 96, Color("b92d60"))
+	var title := _make_label(_copy("menu_title"), 84 if _locale == "he" else 88, Color("b92d60"))
 	title.name = "MenuTitle"
+	title.clip_text = true
 	title.add_theme_font_override("font", JuliaThemeFactory.display_font(700.0))
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT if _locale == "he" else HORIZONTAL_ALIGNMENT_LEFT
 	title.add_theme_constant_override("outline_size", 0)
-	title.add_theme_color_override("font_shadow_color", Color("cc942f"))
+	title.add_theme_color_override("font_shadow_color", Color.TRANSPARENT)
 	title.add_theme_constant_override("shadow_offset_x", 0)
-	title.add_theme_constant_override("shadow_offset_y", 2)
+	title.add_theme_constant_override("shadow_offset_y", 0)
 	_side_content.add_child(title)
 
 	var subtitle := _make_label(
@@ -124003,12 +123986,13 @@ func _build_menu_content() -> void:
 		21 if not _large_text else 25, Color("493126")
 	)
 	subtitle.name = "MenuSubtitle"
-	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT if _locale == "he" else HORIZONTAL_ALIGNMENT_LEFT
 	subtitle.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	subtitle.add_theme_constant_override("line_spacing", 1)
 	_side_content.add_child(subtitle)
 
 	var flex := Control.new()
+	flex.name = "MenuActionSpace"
 	flex.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_side_content.add_child(flex)
 
@@ -124031,10 +124015,10 @@ func _build_menu_content() -> void:
 	if resume_slot.is_empty():
 		_menu_primary_action = start_button
 		_menu_secondary_action = null
-		# Reserve the secondary action's space so Continue never shifts the menu.
 		var secondary_space := Control.new()
 		secondary_space.name = "MenuSecondarySpace"
-		secondary_space.custom_minimum_size.y = 44.0 if not _large_text else 50.0
+		secondary_space.custom_minimum_size.y = 0.0
+		secondary_space.visible = false
 		_side_content.add_child(secondary_space)
 	else:
 		_menu_secondary_action = start_button
@@ -124046,28 +124030,31 @@ func _build_menu_content() -> void:
 		)
 
 	var edition_label := _make_label("××”×“×•×¨×”" if _locale == "he" else "Edition", 15, MUTED)
+	edition_label.name = "MenuEditionLabel"
 	edition_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	edition_label.visible = false
 	_side_content.add_child(edition_label)
 	var edition_row := HBoxContainer.new()
 	edition_row.name = "EditionSelector"
 	edition_row.layout_direction = Control.LAYOUT_DIRECTION_LTR
-	edition_row.add_theme_constant_override("separation", 24)
+	edition_row.add_theme_constant_override("separation", 8)
 	_side_content.add_child(edition_row)
 	for edition: String in ["modern", "legacy"]:
 		var edition_button := _make_menu_utility_button(edition.capitalize())
 		edition_button.flat = false
 		edition_button.tooltip_text = ("××™×•×¨×™× ×•×××©×§ ××—×•×“×©×™×" if _locale == "he" else "Recreated art and interface") if edition == "modern" else ("×”××©×—×§ ×”××§×•×¨×™" if _locale == "he" else "The original game")
 		edition_button.name = "Edition" + edition.capitalize()
-		edition_button.custom_minimum_size = Vector2(112, 44)
+		edition_button.custom_minimum_size = Vector2(44, 44)
+		# Translated labels must never widen the entire scrolling action column.
+		edition_button.clip_text = true
 		edition_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		edition_button.add_theme_font_override("font", JuliaThemeFactory.display_font())
-		edition_button.add_theme_font_size_override("font_size", 19 if not _large_text else 22)
+		edition_button.add_theme_font_size_override("font_size", 17 if not _large_text else 20)
 		var selected := StyleBoxFlat.new()
-		selected.bg_color = Color.TRANSPARENT
+		selected.bg_color = Color(PAPER, 0.86)
 		selected.border_color = TEAL
-		selected.border_width_bottom = 3
-		selected.expand_margin_left = -48.0
-		selected.expand_margin_right = -48.0
+		selected.border_width_bottom = 2
+		selected.set_corner_radius_all(4)
 		edition_button.add_theme_stylebox_override("pressed", selected)
 		edition_button.add_theme_stylebox_override("hover_pressed", selected)
 		edition_button.add_theme_color_override("font_pressed_color", TEAL)
@@ -124108,6 +124095,12 @@ func _build_menu_content() -> void:
 	fullscreen_link.pressed.connect(_toggle_fullscreen)
 	utility_row.add_child(fullscreen_link)
 	fullscreen_link.visible = not OS.has_feature("android")
+	for utility: Button in [settings_link, language_link, fullscreen_link]:
+		utility.custom_minimum_size.y = 44
+		utility.clip_text = true
+		utility.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		utility.add_theme_color_override("font_outline_color", PAPER)
+		utility.add_theme_constant_override("outline_size", 3)
 	if is_instance_valid(_menu_primary_action):
 		call_deferred("_focus_menu_primary_action")
 
@@ -124407,7 +124400,7 @@ func _make_menu_action_button(value: String, primary: bool) -> Button:
 	var result := Button.new()
 	result.text = value
 	result.focus_mode = Control.FOCUS_ALL
-	result.custom_minimum_size.y = (62.0 if primary else 44.0) if not _large_text else (70.0 if primary else 50.0)
+	result.custom_minimum_size.y = (56.0 if primary else 44.0) if not _large_text else (64.0 if primary else 50.0)
 	result.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	result.add_theme_font_size_override("font_size", (24 if primary else 20) + (3 if _large_text else 0))
 	result.add_theme_font_override("font", JuliaThemeFactory.display_font())
@@ -124420,7 +124413,7 @@ func _make_menu_action_button(value: String, primary: bool) -> Button:
 	normal.bg_color = Color("267d76") if primary else Color.TRANSPARENT
 	normal.border_color = Color("185953")
 	normal.border_width_bottom = 3 if primary else 0
-	normal.set_corner_radius_all(16)
+	normal.set_corner_radius_all(8)
 	normal.content_margin_left = 18.0
 	normal.content_margin_right = 18.0
 	normal.content_margin_top = 6.0
@@ -124433,7 +124426,7 @@ func _make_menu_action_button(value: String, primary: bool) -> Button:
 	focus.bg_color = Color.TRANSPARENT
 	focus.border_color = GOLD
 	focus.set_border_width_all(2)
-	focus.set_corner_radius_all(16)
+	focus.set_corner_radius_all(8)
 	result.add_theme_stylebox_override("normal", normal)
 	result.add_theme_stylebox_override("hover", hover)
 	result.add_theme_stylebox_override("pressed", pressed)
@@ -124774,7 +124767,7 @@ func _update_stage_content() -> void:
 		_legacy_menu_backdrop.visible = original_menu_open
 		_refresh_legacy_menu_controls()
 	_menu_art.visible = is_menu and not original_menu_open
-	_menu_tint.visible = is_menu and not original_menu_open
+	_warm_ground.color = PAPER if is_menu and not original_menu_open else INK
 	_stage_card.visible = is_legacy_slice
 	if is_instance_valid(_full_adventure):
 		_full_adventure.visible = _view_mode == ViewMode.ADVENTURE
@@ -124967,8 +124960,6 @@ func _layout_body() -> void:
 
 	_menu_art.position = Vector2.ZERO
 	_menu_art.size = available
-	_menu_tint.position = Vector2.ZERO
-	_menu_tint.size = available
 
 	if _view_mode == ViewMode.MAIN_MENU:
 		if _presentation_edition == "legacy" and is_instance_valid(_original_menu):
@@ -124997,23 +124988,8 @@ func _layout_body() -> void:
 				_legacy_continue_button.position = Vector2(controls_x + button_width + 16.0, 8.0)
 			_layout_toast()
 			return
-		var menu_margin: float = clampf(available.x * 0.032, 24.0, 54.0)
-		var menu_rail_width: float = clampf(
-			available.x * 0.34,
-			370.0,
-			500.0
-		)
 		_side_panel.visible = true
-		_side_panel.position = Vector2(
-			menu_margin,
-			menu_margin
-		)
-		_side_panel.size = Vector2(
-			menu_rail_width,
-			maxf(360.0, available.y - menu_margin * 2.0)
-		)
-		if WebLayout.enabled():
-			_layout_web_menu(available)
+		_layout_web_menu(available)
 		_layout_toast()
 		return
 
@@ -125066,34 +125042,45 @@ func _layout_body() -> void:
 
 func _layout_web_menu(available: Vector2) -> void:
 	var portrait := available.x < 600.0 and available.y > available.x
-	var short := available.y < 500.0
-	var margin := 12.0 if portrait else 8.0
-	var top := minf(224.0, available.y * 0.26) if portrait else margin
+	var short := available.y < (640.0 if portrait else 440.0)
+	var margin := 16.0 if portrait else clampf(available.x * 0.044, 24.0, 64.0)
+	var hero_height := available.y * 0.42 if portrait else available.y
+	var top := hero_height + 12.0 if portrait else (18.0 if short else 48.0)
 	_side_panel.position = Vector2(margin, top)
-	_side_panel.size = Vector2(available.x - margin * 2 if portrait else minf(440.0, available.x * 0.48), available.y - top - margin)
-	_menu_art.size = Vector2(available.x, minf(360.0, available.y * 0.48)) if portrait else available
-	(_menu_tint.material as ShaderMaterial).set_shader_parameter("portrait", portrait)
+	_side_panel.size = Vector2(minf(320.0, available.x - margin * 2.0), available.y - top - (8.0 if portrait and short else (12.0 if portrait else (18.0 if short else 40.0))))
+	_menu_art.size = Vector2(available.x, hero_height)
+	_menu_art.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
 	var padding: MarginContainer = _side_panel.find_child("MenuRailMargin", true, false)
 	for side: String in ["left", "right", "top", "bottom"]:
-		padding.add_theme_constant_override("margin_" + side, 8 if short or portrait else 20)
+		padding.add_theme_constant_override("margin_" + side, 0)
 	var title: Label = _side_content.find_child("MenuTitle", true, false)
-	if title != null: title.add_theme_font_size_override("font_size", 48 if short else (64 if portrait else (88 if _locale == "he" else 96)))
+	if title != null:
+		var title_size := 48 if short else (60 if portrait else (84 if _locale == "he" else 88))
+		var title_font := title.get_theme_font("font")
+		while title_size > 40 and title_font.get_string_size(title.text, HORIZONTAL_ALIGNMENT_LEFT, -1, title_size).x > _side_panel.size.x:
+			title_size -= 2
+		title.add_theme_font_size_override("font_size", title_size)
 	var subtitle: Label = _side_content.find_child("MenuSubtitle", true, false)
 	if subtitle != null:
 		subtitle.visible = not short
-		subtitle.add_theme_font_size_override("font_size", 16 if short else 19)
+		subtitle.add_theme_font_size_override("font_size", 18 if portrait else 20)
 	var top_space: Control = _side_content.find_child("MenuTopSpace", true, false)
-	if top_space != null: top_space.custom_minimum_size.y = 0 if short or portrait else 32
+	if top_space != null: top_space.custom_minimum_size.y = 0
+	var action_space: Control = _side_content.find_child("MenuActionSpace", true, false)
+	if action_space != null:
+		action_space.size_flags_vertical = Control.SIZE_FILL if portrait else Control.SIZE_EXPAND_FILL
+		action_space.custom_minimum_size.y = (4 if short else 8) if portrait else 0
 	var secondary_space: Control = _side_content.find_child("MenuSecondarySpace", true, false)
-	if secondary_space != null: secondary_space.custom_minimum_size.y = 0 if short else 20
+	if secondary_space != null: secondary_space.custom_minimum_size.y = 0
 	var fullscreen: Button = _side_content.find_child("MenuFullscreenButton", true, false)
-	if fullscreen != null: fullscreen.visible = false
+	if fullscreen != null: fullscreen.visible = not WebLayout.enabled() and not OS.has_feature("android")
 	for name: String in ["NewGameButton", "ContinueButton"]:
 		var button: Button = _side_content.find_child(name, true, false)
 		if button != null:
-			button.custom_minimum_size.y = 48 if short else 62
-			button.add_theme_font_size_override("font_size", 20 if short else 24)
-	_side_content.add_theme_constant_override("separation", 4 if short else 8)
+			var primary := button == _menu_primary_action
+			button.custom_minimum_size.y = 56 if primary else 44
+			button.add_theme_font_size_override("font_size", (22 if primary else 18) + (3 if _large_text else 0))
+	_side_content.add_theme_constant_override("separation", 4 if short else 6)
 
 
 func _layout_settings() -> void:
@@ -141644,7 +141631,7 @@ EN»€VÅËÌ*4       data/legacy/cafe_1.inf  @ ç6    ¬	      ƒş”Z#›í)6·   
       ­gn´líÓï˜­®Âú       data/legacy/heb/street13.inf`şè6    ‡
       ‚Â2óÀKû½Ïå“<ïì¬f       data/legacy/heb/street2.inf  	é6          É©í¨á{ô·|üÂ •DÜï       data/legacy/heb/street3.inf  é6    R	      ıuOêx˜ú¹0³²k       data/legacy/heb/street5.inf €é6    ı      ´ù÷·‰íH‡E&]i¡Ò       data/legacy/items.inf   €'é6    ó      òˆ«½Ôª‰Š´Têï       data/legacy/lab1.inf€=é6    Ê      ìmÜ¸“ˆíĞ¥@ƒˆŒ¡       data/legacy/lab3.inf`@é6    H      Î­şOØ£Huıc{Í       data/legacy/paper_1.inf ÀAé6    `      :ºoÓ‚g]ìS2Í       data/legacy/paper_2.inf  Ié6    `      #ZcŒªãA›~^½tñ6¶€       data/legacy/photo_1.inf €Pé6    
       åIf-å€í¬¡åo cÀ       data/legacy/photo_2.inf  [é6    Q      uæ‰‚,	›tq. „
-áŠ       data/legacy/street10.inf€fé6    Î       Ñ"å›³”éw_â,7Ã8È       data/legacy/street11.inf`gé6    ^      }ÇS‚ÛõÏËT˜Ç¡       data/legacy/street12.infÀié6    j      zHhÛt jôò‚Š­» ×p       data/legacy/street14.inf@ké6    ±       üx(.çõá»ök,‚×       data/legacy/street15.inf lé6    4      ÷ û*XÔÏï¦mß       data/legacy/street16.inf@mé6    È       º¦S‰§ğ¬ÎéŠ’ªï       data/legacy/street17.inf né6           ŒJÒŒÒ&	,ã«ôù       data/legacy/street4.inf @oé6          eÆU!x¿>&¼pë—´i       data/legacy/street6.inf àpé6          j®u©Tû}Ñ2KaŞéÄ®ç       data/legacy/street7.inf  sé6    $      UËZ„Ç8ÌÁO}íë‚ÊE       data/legacy/street8.inf @té6    ÷       Ø7ùK3ey—ğ–øÄHx       data/legacy/street9.inf @ué6    å       4‚î†=–}¢í[Ãh       data/locales/cs.json@vé6    ü~     Ë78¯«¥—66ıW²Op       data/locales/de.json@õë6    $œ     ]û2Oø@ep›%qkr       data/locales/en.json€‘î6    ¹m     ŒY€O4y®G}*©Ù5       data/locales/fr.json@ÿğ6    ¡Ÿ      ¹?UÏøx/c0™f       data/locales/he.json Ÿó6    1¿     °Ié´¼‰Ç6Üvƒ´4	Ü       data/locales/nl.json@^ö6    ğ‡     yâHfüB! kâ¶u\       data/locales/pl.json@æø6    0‹     ¿‡¹YïW÷5AµÒ•ô       data/locales/ru.json€qû6    ‘Z     ±œÜSµaß|”sÿ¤Æk’‰        data/locales/templates.cs.json   Ìş6    ò)      hØUÆMHLó®]¨        data/locales/templates.de.json   öş6    ›*      Š¬.æ&k3f¨•	ZZ        data/locales/templates.en.json  À ÿ6    í(      öŠô²:Á}lº¬fÄ`        data/locales/templates.fr.json  ÀIÿ6    +      @Ìz²Fäz½Ù.ÎÇ[‰        data/locales/templates.he.json  àtÿ6    ¾+      [á[ÿò·*î$¾        data/locales/templates.nl.json    ÿ6    Ú)      
+áŠ       data/legacy/street10.inf€fé6    Î       Ñ"å›³”éw_â,7Ã8È       data/legacy/street11.inf`gé6    ^      }ÇS‚ÛõÏËT˜Ç¡       data/legacy/street12.infÀié6    j      zHhÛt jôò‚Š­» ×p       data/legacy/street14.inf@ké6    ±       üx(.çõá»ök,‚×       data/legacy/street15.inf lé6    4      ÷ û*XÔÏï¦mß       data/legacy/street16.inf@mé6    È       º¦S‰§ğ¬ÎéŠ’ªï       data/legacy/street17.inf né6           ŒJÒŒÒ&	,ã«ôù       data/legacy/street4.inf @oé6          eÆU!x¿>&¼pë—´i       data/legacy/street6.inf àpé6          j®u©Tû}Ñ2KaŞéÄ®ç       data/legacy/street7.inf  sé6    $      UËZ„Ç8ÌÁO}íë‚ÊE       data/legacy/street8.inf @té6    ÷       Ø7ùK3ey—ğ–øÄHx       data/legacy/street9.inf @ué6    å       4‚î†=–}¢í[Ãh       data/locales/cs.json@vé6    ü~     Ë78¯«¥—66ıW²Op       data/locales/de.json@õë6    $œ     ]û2Oø@ep›%qkr       data/locales/en.json€‘î6    ¹m     ŒY€O4y®G}*©Ù5       data/locales/fr.json@ÿğ6    ¡Ÿ      ¹?UÏøx/c0™f       data/locales/he.json Ÿó6    1¿     °Ié´¼‰Ç6Üvƒ´4	Ü       data/locales/nl.json@^ö6    ğ‡     yâHfüB! kâ¶u\       data/locales/pl.json@æø6    0‹     ¿‡¹YïW÷5AµÒ•ô       data/locales/ru.json€qû6    —Z     ±Î[ÛÑhÓïL€‡ÈyÄ{p        data/locales/templates.cs.json   Ìş6    ò)      hØUÆMHLó®]¨        data/locales/templates.de.json   öş6    ›*      Š¬.æ&k3f¨•	ZZ        data/locales/templates.en.json  À ÿ6    í(      öŠô²:Á}lº¬fÄ`        data/locales/templates.fr.json  ÀIÿ6    +      @Ìz²Fäz½Ù.ÎÇ[‰        data/locales/templates.he.json  àtÿ6    ¾+      [á[ÿò·*î$¾        data/locales/templates.nl.json    ÿ6    Ú)      
 l
 Õ¼•'€—!d        data/locales/templates.pl.json  €Êÿ6    *      Öş#3X¬lÕ;²¹—        data/locales/templates.ru.json   õÿ6    Ù1      Ô pB„E":Çj‚@rš       data/mell_voice_cues.json    ' 7    º     TWEpHŞH6ÒØJê        data/mell_voice_envelopes.json  À37    Xu     €G¯Ú.Ñ¿qÒ£vŞ*    $   data/minigame_score_geometry.json    ©7    a     —[öóşd×¤c×Û       data/modern_credits.json@
 	7    Q1      Ìvs¯Q³vŸùF/±>è    $   data/modern_evidence_documents.json  ;	7    ãĞ      0ãÀŸ0h„.ibßCÿ(ì        data/modern_future_gallery.json  
@@ -141675,18 +141662,19 @@ a°ÍÊth§e    ,   rooms_shared/streets/street16-v1.png.import À¬7    Ç       
 ‡‰á²VìĞ¾|Ja	^‚    (   src/domain/legacy_asset_index.gd.remap  @!7    8       ñÜ»Ï:£ORƒz{¾$V    $   src/domain/legacy_asset_index.gdc   €!7    ü%      Z	¯Ğ6ğ)1
 KŠ¼º‹Ù    ,   src/domain/legacy_content_catalog.gd.remap  €G7    <       ßøˆš‡1rï£ÿ    (   src/domain/legacy_content_catalog.gdc   ÀG7    q[      É$E² L—†&œ÷k    (   src/domain/legacy_game_state.gd.remap   @£7    7       -äï«óØ“¥lZ¬‘        src/domain/legacy_game_state.gdc€£7    »$      Û9˜Ì¾yLÜYø¶ôê±‡    $   src/domain/legacy_session.gd.remap  @È7    4       5Î™îè:‚Q @ç        src/domain/legacy_session.gdc   €È7    İ]      øÇ”ÙÀ¸ŸïC‚ó'       src/domain/save_store.gd`&‘7    ‹      KÆwOø¯$Y†¹%d¾Ö”       src/domain/save_store.gdc   €±‘7    k      iì'|9Ñ?ÚqUÅé;`(    ,   src/domain/visual_remaster_registry.gd.remap ’7    >       1‰['iığ¼yØ7Ò°8    (   src/domain/visual_remaster_registry.gdc à’7    ùC      Šî*Aò8Å	L7°î´ş    ,   src/minigames/asit_minigame_host.gd.remap   à`’7    ;       ‘÷hÿ‹*Ö Öèk–½X    $   src/minigames/asit_minigame_host.gdc a’7    Z      A¢ü‰©$Ê¨Æ6¦Cf    ,   src/minigames/asit_minigame_view.gd.remap   €x’7    ;       ™gÇöùĞ¼[vBªâ¨    $   src/minigames/asit_minigame_view.gdcÀx’7     Š      ‰½Aç+p¨¢“Ê=Ò    ,   src/minigames/asit_print_backdrop.gd.remap  À“7    <       Ü$ß££ºx+ú2³cŞ³‘    (   src/minigames/asit_print_backdrop.gdc    “7    æ      ìIeR†ù3ˆšğ+Â    $   src/minigames/lab_activity.gd.remap  “7    5       ã½¬Œö«'xûcºJ§i        src/minigames/lab_activity.gdc  @“7    v1      êÒ£CT¸|«Bd…õÊ    ,   src/minigames/lab_balance_visual.gd.remap   À<“7    ;       ÿ˜Ç b‰ç	©4Ø‚šáæ    $   src/minigames/lab_balance_visual.gdc =“7    0      †Îô/	±_Ê@1!¨ú_    $   src/minigames/minigame_copy.gd.remap@M“7    6       ©Ô«&Õfj;ä|±        src/minigames/minigame_copy.gdc €M“7    Ì       %pÊ3æpàú¼’Ï|›    ,   src/minigames/modern_lab_pan_front.gdshader `n“7    ×      «…ÄùºgH`–•ŞÇr    (   src/minigames/modern_lab_puzzle.gd.remap@p“7    :       \¡òt	şr|Ãx#ä^ì    $   src/minigames/modern_lab_puzzle.gdc €p“7    ,0      {³á+ª~ôÌšEV    0   src/minigames/modern_lab_touch_controls.gd.remapÀ “7    B       “²âñwÏ&R(z¥öûÌ    ,   src/minigames/modern_lab_touch_controls.gdc  ¡“7    ³'      ı/šk/Õ»’"›ji    ,   src/minigames/modern_note_rubbing.gdshader  àÈ“7    |      BÀ?«ï5ú*êE.gUVĞ    ,   src/minigames/modern_photo_puzzle.gd.remap  `Ë“7    <       Ì¥iy$A÷ØaŒ^åügÙà    (   src/minigames/modern_photo_puzzle.gdc    Ë“7    d=      N˜ÀI4÷	JÍ-Š,­½D    0   src/minigames/modern_trivia_controls.gd.remap    	”7    ?       Aç¶d­ÂÉS£§1¡    (   src/minigames/modern_trivia_controls.gdc`	”7    ’      Æ·&0¸,ÆÑñbpâ~oå    ,   src/minigames/modern_trivia_scene.gd.remap   '”7    <       GIk~bcÀŞŒÎŞå)À    (   src/minigames/modern_trivia_scene.gdc   @'”7    >      ¾kYÅhô
 ‹EU!MC«    ,   src/minigames/modern_watch_scene.gd.remap   €F”7    ;       Vy¡ëIÈq±Wz——¼Ö    $   src/minigames/modern_watch_scene.gdcÀF”7    O      æOúbös‡®~ÁËÓ¨‡Ê    0   src/minigames/original_minigame_view.gd.remap    c”7    ?       ©"ıÎ‘ãÙXÕä6¸™ä    (   src/minigames/original_minigame_view.gdc`c”7    8e      \‰1A,ùê-ûÚ–&!.o    ,   src/minigames/original_photo_mask.gdshader   È”7    c       =ä‡bå hÛ6m¬    (   src/minigames/photo_activity.gd.remap    Ì”7    7       !Ü”bİ£öà`6Q9ˆİï        src/minigames/photo_activity.gdc`Ì”7          ÜW"‚¥Å^¸‘ ÌÎ    (   src/minigames/trivia_activity.gd.remap  €å”7    8       Œëì~ÀwØÇï“´¡š]    $   src/minigames/trivia_activity.gdc   Àå”7    8#      Á%©’ĞóÉv@/šä íC    (   src/minigames/watch_activity.gd.remap    	•7    7       àımıËCW´ )?59ÑÙ        src/minigames/watch_activity.gdc@	•7    è      „-6r:p;ĞG¾<H·Á    ,   src/minigames/web_activity_controls.gd.remap@•7    >       Ìâ…²xÕŒkœZ›Á    (   src/minigames/web_activity_controls.gdc €•7    U      ÿGmíùÚ'WŞÉ4º|L    8   src/presentation/adventure_stage_placeholder.gd.remap   à2•7    G       u’{j²Àj9jşà€Tb    0   src/presentation/adventure_stage_placeholder.gdc@3•7    ²      Ğ
-Gy»Ü1ûv5"L¥nÅ    ,   src/presentation/audio_preferences.gd.remap  I•7    =       ³Ø»gTŒU%Ò†ÃCÉ	co    (   src/presentation/audio_preferences.gdc  @I•7    á      vçuØŠ³5Ò}îŠOÎ    0   src/presentation/director_bitmap_ink.gd.remap   @U•7    ?       ¼–#Ÿ6Ftf–Âi>    (   src/presentation/director_bitmap_ink.gdc€U•7    É      xhûgæq§©ÛĞËá    ,   src/presentation/ending_sequence.gd.remap   `\•7    ;       Ô~DyPé„İ¿Ï×Q±ô„›    $   src/presentation/ending_sequence.gdc \•7    q.      š“‚Åø„˜¯2ÖwIq€´    ,   src/presentation/evidence_journal_view.gd    ‹•7    z¬      ƒ·/îJ•Ú«Ï„JUÛ    ,   src/presentation/evidence_journal_view.gdc   7–7    ¤|      Mx¹ìÙĞÊñ    (   src/presentation/full_adventure_view.gd `´–7    Ô„     ‹]è¢ˆ0ä…'^•+    (   src/presentation/full_adventure_view.gdc@9™7    3™     Àôb¸5Ğò­¾ì`ÕG]    0   src/presentation/inventory_luggage_tag.gd.remap €Òš7    A       0Í/Íší(6³PlÃ€è    ,   src/presentation/inventory_luggage_tag.gdc  àÒš7    R      ¥¼;P™[ï·CA[Å    4   src/presentation/legacy_adventure_presenter.gd.remap@×š7    F       —díì‰Áåe‹Ó<*N‘    0   src/presentation/legacy_adventure_presenter.gdc  ×š7    :£      8˜h±C"Ærj¸Ùf™Àõ    4   src/presentation/legacy_dialogue_overlay.gd.remap   àz›7    C       ê£rÏeØ;fâ¼ç8A­    ,   src/presentation/legacy_dialogue_overlay.gdc@{›7    ¹H      MlÕõq/Ğ›OÁ+ƒ½”    ,   src/presentation/legacy_effect_host.gd.remap Ä›7    >       iBÚ±ùåõ{{ï%pôÃài    (   src/presentation/legacy_effect_host.gdc @Ä›7    ¼      ³~x2Ì°§bªßıâˆ‘í    <   src/presentation/legacy_random_animation_scheduler.gd.remap  Tœ7    M       '¨U°pQÿGÑ÷!·    8   src/presentation/legacy_random_animation_scheduler.gdc  `Tœ7    Ò      îkk—Êš¾–Ç¸Sáe    0   src/presentation/legacy_score_surface.gd.remap  @aœ7    @       T~ÛCRğN*Õ€¼\    ,   src/presentation/legacy_score_surface.gdc   €aœ7    ‹      ±`“KS‘oÍS0=©°…    ,   src/presentation/letterbox_ambience.gdshader |œ7    ‚      Œ³ô~À« İF·i–ÚÍ        src/presentation/main_shell.gd  À„œ7    º©     Ñ‰#ŠÀ‚	‰a0ÿ˜Ænµá        src/presentation/main_shell.gdc €.Ÿ7    KÇ     šRæ–<o…Tæv4â-    4   src/presentation/modern_actor_expression.gd.remap   àõ 7    C       öÉ¡Z…dn5K<^WbÑ    ,   src/presentation/modern_actor_expression.gdc@ö 7    M      Az¢·7ÊqÕéÁ–ÁC3.    ,   src/presentation/modern_actor_lips.gdshader  û 7    æ0      N>A&¡F,ôYå;“    0   src/presentation/modern_actor_sprite.gd.remap    ,¡7    ?       ÷±ğÑĞOe»ÕXõ´Åª    (   src/presentation/modern_actor_sprite.gdcà,¡7    Õ8      $¶œÌRÖj…"ô°b     4   src/presentation/modern_actor_upper_face.gd.remap   Àe¡7    C       …å?O=øNä—½öÕ;î    ,   src/presentation/modern_actor_upper_face.gdc f¡7    ì       z·“4€†c/<‚›    4   src/presentation/modern_actor_upper_face.gdshader    ‡¡7    3      @µŞU6¯%\aâ=
-Ón5    0   src/presentation/modern_actor_upper_face.json   @º¡7    +      /q@u8ëj½­kˆ$™    4   src/presentation/modern_alice_ending_watch.gd.remap €º£7    E       TZpp(l@Bt“pûá    0   src/presentation/modern_alice_ending_watch.gdc  àº£7    ¤      O—1ÏÊ“¬‚í*è¸]    4   src/presentation/modern_alice_expressions.gd.remap   Â£7    D       ;Õ2ıud}Í_ö^Ù    0   src/presentation/modern_alice_expressions.gdc    Ã£7          ‰§MÔZÇß_b83wVû    4   src/presentation/modern_body_polygon_mask.gdshader   Ô£7    ®      û»ô…\ê/£&Ó"m¾`¨    0   src/presentation/modern_cafe_alice_body.gd.remap`Ø£7    B       Şªb©<=òGºGë    ,   src/presentation/modern_cafe_alice_body.gdc ÀØ£7    )      øş‚¯±£FĞ@2"¸®    ,   src/presentation/modern_cafe_camera.gd.remapà¤7    >       M.`b)Ê<+¹ŠÎò$:    (   src/presentation/modern_cafe_camera.gdc  ¤7    W      }iäœêÊ*ÄÔ4Hâ¤    4   src/presentation/modern_cafe_dorothy_body.gd.remap  €¤7    D       BŞEMãóŠûQtğ¼}£    0   src/presentation/modern_cafe_dorothy_body.gdc   à¤7    º.      ˆ1Æªé· €±¾¾™+    ,   src/presentation/modern_cafe_scene.gd.remap  =¤7    =       ø5hõ”€º°Ÿl”ÈlWÀ    (   src/presentation/modern_cafe_scene.gdc  à=¤7    H'      Ç´Åvyï0évHÎ†´\ê    0   src/presentation/modern_character_art.gd.remap  @e¤7    @       ÌÂ¸ónaBª¼i¼¿    ,   src/presentation/modern_character_art.gdc   €e¤7    J      Ó2›“Ò!=~RRãõ5É    0   src/presentation/modern_cloth_ambient.gd.remap  à|¤7    @       3œ</RáóËòÆÚ'`iu    ,   src/presentation/modern_cloth_ambient.gdc    }¤7    ª      óÑŠ^;~¯‚¹ï§®ì@E    0   src/presentation/modern_clothing_camera.gd.remapà…¤7    B       ³ê†K¼bÓ“òjF]    ,   src/presentation/modern_clothing_camera.gdc @†¤7    ß      kÍ´_˜…İ|–&'€Ê´    0   src/presentation/modern_credits_panel.gd.remap   ’¤7    @       c	KE\Ó¾¼e›    ,   src/presentation/modern_credits_panel.gdc   `’¤7    ×-      #˜KôVdÔM±|œŒq”›    ,   src/presentation/modern_dialogue_overlay.gd @À¤7    ÀQ      2ôO(ş‘W]Ğ¥§'Ç¬_    ,   src/presentation/modern_dialogue_overlay.gdc ¥7    8      ìÁ êiä•@Ä‡@w    4   src/presentation/modern_dorothy_expressions.gd.remap J¥7    F       É³nÛ3İob¡ú?n²'    0   src/presentation/modern_dorothy_expressions.gdc  K¥7    -      ‰Fò?ÚUÍ^Pı2†’Kn    0   src/presentation/modern_dylan_sprite.gd.remap   @\¥7    ?       Úå¸»v‚’àQü~±i+B    (   src/presentation/modern_dylan_sprite.gdc€\¥7    Ş      :™š7>©…‡ÃRŞx³#    4   src/presentation/modern_evidence_document.gd.remap  `z¥7    D       *hcF¦_™ÛÎ{Öú§ücF    0   src/presentation/modern_evidence_document.gdc   Àz¥7    j.      …¼IjŸÁôtNÀ—eKz    0   src/presentation/modern_field_notebook.gd.remap @©¥7    A       Õ…€¦LÊ›;æÆi2Ç™    ,   src/presentation/modern_field_notebook.gdc   ©¥7    VY      rÆFDeê¥°SùM7ø    0   src/presentation/modern_finale_scene.gd.remap    ¦7    ?       ï;—”&ò}dÆÆ››û“H    (   src/presentation/modern_finale_scene.gdc@¦7    *      gø\FóC½üÁóŠ2Óïˆ    ,   src/presentation/modern_future_gallery.gd   `-¦7    CC      øe	Ê¶^B²n/Âã!^    ,   src/presentation/modern_future_gallery.gdc  Àp¦7    1      v‰Ëô<•,/¨Êï›    ,   src/presentation/modern_intro_actor.gdshaderà¡¦7    R      ÌVg%–ßù¿déVÿ     ,   src/presentation/modern_intro_light.gdshader@¾¦7          û€÷hW÷0ß°±Í23    4   src/presentation/modern_intro_portal_actor.gdshader àË¦7    „      ê¸gÖØˆZbéÉ-·î    ,   src/presentation/modern_intro_stage.gd.remap€Ğ¦7    >       )‘æ
-9ae`í0	cÄçË    (   src/presentation/modern_intro_stage.gdc ÀĞ¦7    ÍF      qÁ {Let•:ØÚÈ	˜    ,   src/presentation/modern_intro_voice.gd.remap §7    >       =ææÉ~È(,ï|{¹Nå    (   src/presentation/modern_intro_voice.gdc à§7    C      íı¼‰ıæß¤›˜`KîK    0   src/presentation/modern_inventory_panel.gd.remap@§7    B       ¤Æçšw!_eÙªó³‡d    ,   src/presentation/modern_inventory_panel.gdc  §7    ù      Ã;m*¼4³4ªœxİd»    4   src/presentation/modern_item_presentation.gd.remap   4§7    D       ¥Ù…ä´S7Ñu2·ùQƒÎy    0   src/presentation/modern_item_presentation.gdc    5§7    ı
-      w.!dºXû­?×¿    0   src/presentation/modern_jimmy_held_clue.gd.remap @§7    B       ‘è¿ Œ£éõó"A¥df§    ,   src/presentation/modern_jimmy_held_clue.gdc `@§7    Ø      >âç9ì­ªì¦çÓ¶2t    4   src/presentation/modern_lab_evidence_ink.gd.remap   @G§7    C       [“@LÕH{D«},	Ò®    ,   src/presentation/modern_lab_evidence_ink.gdc G§7    ¾      Í–½¼r‹lòÏü%”KˆPÒ    ,   src/presentation/modern_lab_scene.gd.remap  `S§7    <       kïl1’†V¤ô,Í(cN·    (   src/presentation/modern_lab_scene.gdc    S§7          5²EC/1mÊ[™8»õ)»F    0   src/presentation/modern_layered_action.gd.remap Ào§7    A       —”™KÌLÄ.IXÍ$p    ,   src/presentation/modern_layered_action.gdc   p§7    Æ      Á¯Ÿ®&˜¶O³ª‰×Ñ½5    ,   src/presentation/modern_map_panel.gd.remap   §7    <       d 4$|®¼¾YXÙm    (   src/presentation/modern_map_panel.gdc   @§7    ]A      ¬Á³1Õİÿ¦$Xô‘T(    0   src/presentation/modern_mel_portrait.gd.remap    Ï§7    ?       âæ¹6œˆB–Ö±ˆ¬Á=ˆ    (   src/presentation/modern_mel_portrait.gdcàÏ§7          šqTİ¡Di*ˆM<\¤    ,   src/presentation/modern_mell_phone.gd.remap  Ü§7    =       ¨ê…›0l¶!4Ÿi    (   src/presentation/modern_mell_phone.gdc  @Ü§7    +      ;K¿î–Xà_PõÄÏ    ,   src/presentation/modern_mell_voice.gd.remap €ú§7    =       é;Z4{¦JU¼MqP}    (   src/presentation/modern_mell_voice.gdc  Àú§7          x	ú÷P-ãx8    (   src/presentation/modern_neon.gdshader   à ¨7    ~      Ÿƒ$MşbÔXŸÉ
-ÌöM    ,   src/presentation/modern_opening_art.gd.remap`¨7    >       OÃ 1	šP`u×”náM    (   src/presentation/modern_opening_art.gdc  ¨7    í      xğÀéÿw/·à    ,   src/presentation/modern_paper_scene.gd.remap ¨7    >       8rx¦0·’³%kÔj²<ù    (   src/presentation/modern_paper_scene.gdc à¨7    Ê"      á.>ÄíjØ¸o«~°àv'    4   src/presentation/modern_parent_portraits.gd.remap   À8¨7    C       Ù1şQ˜ë†TPŒÔN    ,   src/presentation/modern_parent_portraits.gdc 9¨7    é      Ïğa[§]ü\WP^d›Ì    0   src/presentation/modern_peace_poster.gdshader    F¨7    8      ĞÜßı:ôD8ƒªã    0   src/presentation/modern_photo_camera.gd.remap   `G¨7    ?       ]ÖAv¯cN^µw½6:    (   src/presentation/modern_photo_camera.gdc G¨7          ‡á  ©ÂHI
-ÈD¹6    ,   src/presentation/modern_photo_scene.gd.remapÀU¨7    >       #àq¦á1•W:éùñbrÎ    (   src/presentation/modern_photo_scene.gdc  V¨7    7=      :ã‘¢W¦Èˆ¯¢öÊÎ    (   src/presentation/modern_portal.gd.remap @“¨7    9       âe¸}_Z»ˆŠúì+     $   src/presentation/modern_portal.gdc  €“¨7    *      } îÍrá<iG2å¶H    (   src/presentation/modern_portal.gdshader À¨7    À      ìPè+o™sNƒ¨ì×…    0   src/presentation/modern_portal_video.gd.remap   €¢¨7    ?       Á a§³àÜ ¿L¦‘ĞH    (   src/presentation/modern_portal_video.gdcÀ¢¨7          t%å‹Â÷ÂğÒ½îÓ):q    4   src/presentation/modern_rick_body_layers.gd.remap   àÁ¨7    C       Fëû|êè{RšG×èbT-/    ,   src/presentation/modern_rick_body_layers.gdc@Â¨7    /      Ú–Í_îÊ*¨X¸ Å    8   src/presentation/modern_rick_body_underpaint.gdshader   €Ó¨7    ê      Ä¶Æsx¨ß‘]ÄF_ò5”    4   src/presentation/modern_rick_evidence_base.gdshader €Ú¨7    f      tD'ˆóKy[¹&Ÿ‚‰    8   src/presentation/modern_rick_evidence_sprite.gd.remap    Ş¨7    G       •÷_Óüê=ª1š±C.    0   src/presentation/modern_rick_evidence_sprite.gdc`Ş¨7    X	      ®N‚Œ 6iP?áÒØ|pGy    8   src/presentation/modern_rick_gesture_body_v3.gd.remap   Àç¨7    G       BºŞ¬”;£ &8JE×÷ù    0   src/presentation/modern_rick_gesture_body_v3.gdc è¨7    .$      ªÉ3|ÄuO›¼‡F~Dd    8   src/presentation/modern_rick_gesture_sleeve_v3.gdshader `©7    ı      úÍ>C`¡ó®UğM˜ü    8   src/presentation/modern_rick_gesture_sprite_v3.gd.remap `©7    I       ò[ä;ƒğ“'c–7    4   src/presentation/modern_rick_gesture_sprite_v3.gdc  À©7          ´ş¸ôüã0A¬ˆñ_6    8   src/presentation/modern_rick_gesture_underpaint.gdshaderà©7    Ì      ƒš8Ó"Y$±%]Õ*ÖöÀ¤    4   src/presentation/modern_rick_reading_body.gd.remap  À"©7    D       ôÚÕUè{‚à¾Ë
-ïQµ    0   src/presentation/modern_rick_reading_body.gdc    #©7    ê      mßÓ­ZsEá#^¯V¯#
-    4   src/presentation/modern_rick_reading_mask.gdshader   4©7    ô      5HÅ±ÌíD[Ó˜    <   src/presentation/modern_rick_reading_polished_body.gd.remap  7©7    M       EJ^*ÉŸu4]z}ñÄf    8   src/presentation/modern_rick_reading_polished_body.gdc  €7©7    n      ŸMiQÁ.L†!KE?l›ú    4   src/presentation/modern_rick_reading_sprite.gd.remap I©7    F       6[—EÂü¬ÜŸATÒ£¼    0   src/presentation/modern_rick_reading_sprite.gdc `I©7    R      ”Ç˜÷ıÑd1srÂ})    8   src/presentation/modern_rick_signing_sprite_v1.gd.remap ÀU©7    I       ³…JœBxG[Â`õÕ«ã    4   src/presentation/modern_rick_signing_sprite_v1.gdc   V©7          óìh’dÊ¸q<Ğï¡.3Ğ    0   src/presentation/modern_rick_signing_v1.gdshader@a©7    ¹      x“³¿°Q8Â¹âág°    8   src/presentation/modern_rick_singing_sprite_v1.gd.remap  d©7    I       Ki°Úk]¤	yÊZzŞØN³    4   src/presentation/modern_rick_singing_sprite_v1.gdc  `d©7    Ä      `ƒR‚ŠóĞU¬=h—üá5    0   src/presentation/modern_rick_singing_v1.gdshader@m©7    !      ƒ[[B4MĞ1˜<ï    8   src/presentation/modern_rick_wide_listener_v1.gd.remap  €o©7    H       ûB•r'è,¹v~5Ô?    4   src/presentation/modern_rick_wide_listener_v1.gdc   ào©7          ÍçåRØ° S%°Ğ˜FÛÃ    (   src/presentation/modern_sepia.gdshader   s©7    w      9™tÕèÇÈı'ÕÔ€İƒË    8   src/presentation/modern_sheila_cue_sprite_v1.gd.remap   €t©7    G       ñ2÷ÌÉõŒjPkp¿Ÿ(„    0   src/presentation/modern_sheila_cue_sprite_v1.gdcàt©7    s      a4AÊµKø²"ÙÑÙz    4   src/presentation/modern_sheila_palm_body_v1.gd.remap`…©7    F       äÄ÷¨Sí·¢"¹>ÃâåXC    0   src/presentation/modern_sheila_palm_body_v1.gdc À…©7    ì      Â¹@-Ì0?fíœ¯M;    4   src/presentation/modern_sheila_palm_mask.gdshader   À—©7    ®      û»ô…\ê/£&Ó"m¾`¨    8   src/presentation/modern_sheila_palm_sprite_v1.gd.remap  €›©7    H       ì,ØçuÅèÈš{Í¾    4   src/presentation/modern_sheila_palm_sprite_v1.gdc   à›©7    u      şÚ)uî–iÎå×tl·¼    8   src/presentation/modern_sheila_palm_underpaint.gdshader `­©7    ¹      =õqw*¯ô1 s`¼x    ,   src/presentation/modern_speech_cues.gd.remap ±©7    >       ˆtgx$R eKø	ø°¦%    (   src/presentation/modern_speech_cues.gdc `±©7    J      :Şí"·™ŸÏïÛ™”I    4   src/presentation/modern_street12_effects.gd.remap   À¿©7    C       Ä\€yM›-Ö]B`‡    ,   src/presentation/modern_street12_effects.gdc À©7          ô¨N×é¡Ó<BÈV ÚVV    4   src/presentation/modern_street12_effects.gdshader   @Ï©7    å      —&WÎúŒ‰~–g¥FÖ    0   src/presentation/modern_street1_effects.gd.remap@Õ©7    B       6ïH€{@ç¦á/É    ,   src/presentation/modern_street1_effects.gdc  Õ©7    n      R­ÈÆzj‘ àg«Õ›s
-    0   src/presentation/modern_street1_effects.gdshader æ©7    Ø      «õİÁ‚¾.*šBR¸¿v›     0   src/presentation/modern_street2_rack.gd.remap    ö©7    ?       ·OE›¦İõAš{î    (   src/presentation/modern_street2_rack.gdc@ö©7    W      îÎˆÛ;— ?lšDMñš    0   src/presentation/modern_street3_effects.gd.remap ü©7    B       ·ÆÒ7R®8àˆ#N    ,   src/presentation/modern_street3_effects.gdc  ı©7    ë      í¾Ñ_Ñ_›¶v²—)!@    0   src/presentation/modern_street3_effects.gdshader 	ª7    5      .F˜£È¢Ínè÷?iP    0   src/presentation/modern_street5_pigeons.gd.remap@ª7    B       ¥áÍÁ¿µ]ş˜Gš8    ,   src/presentation/modern_street5_pigeons.gdc  ª7    H	      ÎîØÙu	/­Æ3,Íû    0   src/presentation/modern_street5_pigeons.gdshader ª7    ş	      ÃÎ}$ânÅÌœTB    0   src/presentation/modern_street6_effects.gd.remap !ª7    B       ŞàyF{ÑúèÛÓMƒñ    ,   src/presentation/modern_street6_effects.gdc `!ª7    w	      ©^ğ<) #|ŠPœ(­½š˜    0   src/presentation/modern_street6_effects.gdshaderà*ª7    "      o:ÈèL q©¬9<    0   src/presentation/modern_street_travel.gd.remap   /ª7    @       ´à†âdìâMôèxò    ,   src/presentation/modern_street_travel.gdc   `/ª7    #      Ô£/Ôëë‹¶&áÙ€    ,   src/presentation/modern_susan_body.gd.remap  Hª7    =       u Úµ¿ú °·ü5âd<    (   src/presentation/modern_susan_body.gdc  àHª7    %      Gâd§¤<¿Ö`:À
-tëw    0   src/presentation/modern_susan_counter.gdshader   [ª7    ‰       ¢ªö÷iÖĞ Ë˜á    0   src/presentation/modern_susan_face_gaze.gd.remapÀ[ª7    B       (LiAÀ·&pšÈré»¼    ,   src/presentation/modern_susan_face_gaze.gdc  \ª7          Ìé-©Èp‰Ë«¹P£Ûñ    0   src/presentation/modern_susan_notebook.gdshader @_ª7    ë      —kKØ·º‚«šÏn¤1ù    4   src/presentation/modern_waterfront_effects.gd.remap @aª7    E       £ã]ûîáMë›Vü    0   src/presentation/modern_waterfront_effects.gdc   aª7    È      Lºº—gò
+Gy»Ü1ûv5"L¥nÅ    ,   src/presentation/audio_preferences.gd.remap  I•7    =       ³Ø»gTŒU%Ò†ÃCÉ	co    (   src/presentation/audio_preferences.gdc  @I•7    á      vçuØŠ³5Ò}îŠOÎ    0   src/presentation/director_bitmap_ink.gd.remap   @U•7    ?       ¼–#Ÿ6Ftf–Âi>    (   src/presentation/director_bitmap_ink.gdc€U•7    É      xhûgæq§©ÛĞËá    ,   src/presentation/ending_sequence.gd.remap   `\•7    ;       Ô~DyPé„İ¿Ï×Q±ô„›    $   src/presentation/ending_sequence.gdc \•7    q.      š“‚Åø„˜¯2ÖwIq€´    ,   src/presentation/evidence_journal_view.gd    ‹•7    z¬      ƒ·/îJ•Ú«Ï„JUÛ    ,   src/presentation/evidence_journal_view.gdc   7–7    ¤|      Mx¹ìÙĞÊñ    (   src/presentation/full_adventure_view.gd `´–7    Ô„     ‹]è¢ˆ0ä…'^•+    (   src/presentation/full_adventure_view.gdc@9™7    3™     Àôb¸5Ğò­¾ì`ÕG]    0   src/presentation/inventory_luggage_tag.gd.remap €Òš7    A       0Í/Íší(6³PlÃ€è    ,   src/presentation/inventory_luggage_tag.gdc  àÒš7    R      ¥¼;P™[ï·CA[Å    4   src/presentation/legacy_adventure_presenter.gd.remap@×š7    F       —díì‰Áåe‹Ó<*N‘    0   src/presentation/legacy_adventure_presenter.gdc  ×š7    :£      8˜h±C"Ærj¸Ùf™Àõ    4   src/presentation/legacy_dialogue_overlay.gd.remap   àz›7    C       ê£rÏeØ;fâ¼ç8A­    ,   src/presentation/legacy_dialogue_overlay.gdc@{›7    ¹H      MlÕõq/Ğ›OÁ+ƒ½”    ,   src/presentation/legacy_effect_host.gd.remap Ä›7    >       iBÚ±ùåõ{{ï%pôÃài    (   src/presentation/legacy_effect_host.gdc @Ä›7    ¼      ³~x2Ì°§bªßıâˆ‘í    <   src/presentation/legacy_random_animation_scheduler.gd.remap  Tœ7    M       '¨U°pQÿGÑ÷!·    8   src/presentation/legacy_random_animation_scheduler.gdc  `Tœ7    Ò      îkk—Êš¾–Ç¸Sáe    0   src/presentation/legacy_score_surface.gd.remap  @aœ7    @       T~ÛCRğN*Õ€¼\    ,   src/presentation/legacy_score_surface.gdc   €aœ7    ‹      ±`“KS‘oÍS0=©°…    ,   src/presentation/letterbox_ambience.gdshader |œ7    ‚      Œ³ô~À« İF·i–ÚÍ        src/presentation/main_shell.gd  À„œ7    ºª     Ñ’íç›U…êRV{QQ        src/presentation/main_shell.gdc €/Ÿ7    KÇ     šRæ–<o…Tæv4â-    4   src/presentation/modern_actor_expression.gd.remap   àö 7    C       öÉ¡Z…dn5K<^WbÑ    ,   src/presentation/modern_actor_expression.gdc@÷ 7    M      Az¢·7ÊqÕéÁ–ÁC3.    ,   src/presentation/modern_actor_lips.gdshader  ü 7    æ0      N>A&¡F,ôYå;“    0   src/presentation/modern_actor_sprite.gd.remap    -¡7    ?       ÷±ğÑĞOe»ÕXõ´Åª    (   src/presentation/modern_actor_sprite.gdcà-¡7    Õ8      $¶œÌRÖj…"ô°b     4   src/presentation/modern_actor_upper_face.gd.remap   Àf¡7    C       …å?O=øNä—½öÕ;î    ,   src/presentation/modern_actor_upper_face.gdc g¡7    ì       z·“4€†c/<‚›    4   src/presentation/modern_actor_upper_face.gdshader    ˆ¡7    3      @µŞU6¯%\aâ=
+Ón5    0   src/presentation/modern_actor_upper_face.json   @»¡7    +      /q@u8ëj½­kˆ$™    4   src/presentation/modern_alice_ending_watch.gd.remap €»£7    E       TZpp(l@Bt“pûá    0   src/presentation/modern_alice_ending_watch.gdc  à»£7    ¤      O—1ÏÊ“¬‚í*è¸]    4   src/presentation/modern_alice_expressions.gd.remap   Ã£7    D       ;Õ2ıud}Í_ö^Ù    0   src/presentation/modern_alice_expressions.gdc    Ä£7          ‰§MÔZÇß_b83wVû    4   src/presentation/modern_body_polygon_mask.gdshader   Õ£7    ®      û»ô…\ê/£&Ó"m¾`¨    0   src/presentation/modern_cafe_alice_body.gd.remap`Ù£7    B       Şªb©<=òGºGë    ,   src/presentation/modern_cafe_alice_body.gdc ÀÙ£7    )      øş‚¯±£FĞ@2"¸®    ,   src/presentation/modern_cafe_camera.gd.remapà¤7    >       M.`b)Ê<+¹ŠÎò$:    (   src/presentation/modern_cafe_camera.gdc  ¤7    W      }iäœêÊ*ÄÔ4Hâ¤    4   src/presentation/modern_cafe_dorothy_body.gd.remap  €¤7    D       BŞEMãóŠûQtğ¼}£    0   src/presentation/modern_cafe_dorothy_body.gdc   à¤7    º.      ˆ1Æªé· €±¾¾™+    ,   src/presentation/modern_cafe_scene.gd.remap  >¤7    =       ø5hõ”€º°Ÿl”ÈlWÀ    (   src/presentation/modern_cafe_scene.gdc  à>¤7    H'      Ç´Åvyï0évHÎ†´\ê    0   src/presentation/modern_character_art.gd.remap  @f¤7    @       ÌÂ¸ónaBª¼i¼¿    ,   src/presentation/modern_character_art.gdc   €f¤7    J      Ó2›“Ò!=~RRãõ5É    0   src/presentation/modern_cloth_ambient.gd.remap  à}¤7    @       3œ</RáóËòÆÚ'`iu    ,   src/presentation/modern_cloth_ambient.gdc    ~¤7    ª      óÑŠ^;~¯‚¹ï§®ì@E    0   src/presentation/modern_clothing_camera.gd.remapà†¤7    B       ³ê†K¼bÓ“òjF]    ,   src/presentation/modern_clothing_camera.gdc @‡¤7    ß      kÍ´_˜…İ|–&'€Ê´    0   src/presentation/modern_credits_panel.gd.remap   “¤7    @       c	KE\Ó¾¼e›    ,   src/presentation/modern_credits_panel.gdc   `“¤7    ×-      #˜KôVdÔM±|œŒq”›    ,   src/presentation/modern_dialogue_overlay.gd @Á¤7    ÀQ      2ôO(ş‘W]Ğ¥§'Ç¬_    ,   src/presentation/modern_dialogue_overlay.gdc ¥7    8      ìÁ êiä•@Ä‡@w    4   src/presentation/modern_dorothy_expressions.gd.remap K¥7    F       É³nÛ3İob¡ú?n²'    0   src/presentation/modern_dorothy_expressions.gdc  L¥7    -      ‰Fò?ÚUÍ^Pı2†’Kn    0   src/presentation/modern_dylan_sprite.gd.remap   @]¥7    ?       Úå¸»v‚’àQü~±i+B    (   src/presentation/modern_dylan_sprite.gdc€]¥7    Ş      :™š7>©…‡ÃRŞx³#    4   src/presentation/modern_evidence_document.gd.remap  `{¥7    D       *hcF¦_™ÛÎ{Öú§ücF    0   src/presentation/modern_evidence_document.gdc   À{¥7    j.      …¼IjŸÁôtNÀ—eKz    0   src/presentation/modern_field_notebook.gd.remap @ª¥7    A       Õ…€¦LÊ›;æÆi2Ç™    ,   src/presentation/modern_field_notebook.gdc   ª¥7    VY      rÆFDeê¥°SùM7ø    0   src/presentation/modern_finale_scene.gd.remap    ¦7    ?       ï;—”&ò}dÆÆ››û“H    (   src/presentation/modern_finale_scene.gdc@¦7    *      gø\FóC½üÁóŠ2Óïˆ    ,   src/presentation/modern_future_gallery.gd   `.¦7    CC      øe	Ê¶^B²n/Âã!^    ,   src/presentation/modern_future_gallery.gdc  Àq¦7    1      v‰Ëô<•,/¨Êï›    ,   src/presentation/modern_intro_actor.gdshaderà¢¦7    R      ÌVg%–ßù¿déVÿ     ,   src/presentation/modern_intro_light.gdshader@¿¦7          û€÷hW÷0ß°±Í23    4   src/presentation/modern_intro_portal_actor.gdshader àÌ¦7    „      ê¸gÖØˆZbéÉ-·î    ,   src/presentation/modern_intro_stage.gd.remap€Ñ¦7    >       )‘æ
+9ae`í0	cÄçË    (   src/presentation/modern_intro_stage.gdc ÀÑ¦7    ÍF      qÁ {Let•:ØÚÈ	˜    ,   src/presentation/modern_intro_voice.gd.remap §7    >       =ææÉ~È(,ï|{¹Nå    (   src/presentation/modern_intro_voice.gdc à§7    C      íı¼‰ıæß¤›˜`KîK    0   src/presentation/modern_inventory_panel.gd.remap@ §7    B       ¤Æçšw!_eÙªó³‡d    ,   src/presentation/modern_inventory_panel.gdc   §7    ù      Ã;m*¼4³4ªœxİd»    4   src/presentation/modern_item_presentation.gd.remap   5§7    D       ¥Ù…ä´S7Ñu2·ùQƒÎy    0   src/presentation/modern_item_presentation.gdc    6§7    ı
+      w.!dºXû­?×¿    0   src/presentation/modern_jimmy_held_clue.gd.remap A§7    B       ‘è¿ Œ£éõó"A¥df§    ,   src/presentation/modern_jimmy_held_clue.gdc `A§7    Ø      >âç9ì­ªì¦çÓ¶2t    4   src/presentation/modern_lab_evidence_ink.gd.remap   @H§7    C       [“@LÕH{D«},	Ò®    ,   src/presentation/modern_lab_evidence_ink.gdc H§7    ¾      Í–½¼r‹lòÏü%”KˆPÒ    ,   src/presentation/modern_lab_scene.gd.remap  `T§7    <       kïl1’†V¤ô,Í(cN·    (   src/presentation/modern_lab_scene.gdc    T§7          5²EC/1mÊ[™8»õ)»F    0   src/presentation/modern_layered_action.gd.remap Àp§7    A       —”™KÌLÄ.IXÍ$p    ,   src/presentation/modern_layered_action.gdc   q§7    Æ      Á¯Ÿ®&˜¶O³ª‰×Ñ½5    ,   src/presentation/modern_map_panel.gd.remap   §7    <       d 4$|®¼¾YXÙm    (   src/presentation/modern_map_panel.gdc   @§7    ]A      ¬Á³1Õİÿ¦$Xô‘T(    0   src/presentation/modern_mel_portrait.gd.remap    Ğ§7    ?       âæ¹6œˆB–Ö±ˆ¬Á=ˆ    (   src/presentation/modern_mel_portrait.gdcàĞ§7          šqTİ¡Di*ˆM<\¤    ,   src/presentation/modern_mell_phone.gd.remap  İ§7    =       ¨ê…›0l¶!4Ÿi    (   src/presentation/modern_mell_phone.gdc  @İ§7    +      ;K¿î–Xà_PõÄÏ    ,   src/presentation/modern_mell_voice.gd.remap €û§7    =       é;Z4{¦JU¼MqP}    (   src/presentation/modern_mell_voice.gdc  Àû§7          x	ú÷P-ãx8    (   src/presentation/modern_neon.gdshader   à¨7    ~      Ÿƒ$MşbÔXŸÉ
+ÌöM    ,   src/presentation/modern_opening_art.gd.remap`¨7    >       OÃ 1	šP`u×”náM    (   src/presentation/modern_opening_art.gdc  ¨7    í      xğÀéÿw/·à    ,   src/presentation/modern_paper_scene.gd.remap ¨7    >       8rx¦0·’³%kÔj²<ù    (   src/presentation/modern_paper_scene.gdc à¨7    Ê"      á.>ÄíjØ¸o«~°àv'    4   src/presentation/modern_parent_portraits.gd.remap   À9¨7    C       Ù1şQ˜ë†TPŒÔN    ,   src/presentation/modern_parent_portraits.gdc :¨7    é      Ïğa[§]ü\WP^d›Ì    0   src/presentation/modern_peace_poster.gdshader    G¨7    8      ĞÜßı:ôD8ƒªã    0   src/presentation/modern_photo_camera.gd.remap   `H¨7    ?       ]ÖAv¯cN^µw½6:    (   src/presentation/modern_photo_camera.gdc H¨7          ‡á  ©ÂHI
+ÈD¹6    ,   src/presentation/modern_photo_scene.gd.remapÀV¨7    >       #àq¦á1•W:éùñbrÎ    (   src/presentation/modern_photo_scene.gdc  W¨7    7=      :ã‘¢W¦Èˆ¯¢öÊÎ    (   src/presentation/modern_portal.gd.remap @”¨7    9       âe¸}_Z»ˆŠúì+     $   src/presentation/modern_portal.gdc  €”¨7    *      } îÍrá<iG2å¶H    (   src/presentation/modern_portal.gdshader ÀŸ¨7    À      ìPè+o™sNƒ¨ì×…    0   src/presentation/modern_portal_video.gd.remap   €£¨7    ?       Á a§³àÜ ¿L¦‘ĞH    (   src/presentation/modern_portal_video.gdcÀ£¨7          t%å‹Â÷ÂğÒ½îÓ):q    4   src/presentation/modern_rick_body_layers.gd.remap   àÂ¨7    C       Fëû|êè{RšG×èbT-/    ,   src/presentation/modern_rick_body_layers.gdc@Ã¨7    /      Ú–Í_îÊ*¨X¸ Å    8   src/presentation/modern_rick_body_underpaint.gdshader   €Ô¨7    ê      Ä¶Æsx¨ß‘]ÄF_ò5”    4   src/presentation/modern_rick_evidence_base.gdshader €Û¨7    f      tD'ˆóKy[¹&Ÿ‚‰    8   src/presentation/modern_rick_evidence_sprite.gd.remap    ß¨7    G       •÷_Óüê=ª1š±C.    0   src/presentation/modern_rick_evidence_sprite.gdc`ß¨7    X	      ®N‚Œ 6iP?áÒØ|pGy    8   src/presentation/modern_rick_gesture_body_v3.gd.remap   Àè¨7    G       BºŞ¬”;£ &8JE×÷ù    0   src/presentation/modern_rick_gesture_body_v3.gdc é¨7    .$      ªÉ3|ÄuO›¼‡F~Dd    8   src/presentation/modern_rick_gesture_sleeve_v3.gdshader `©7    ı      úÍ>C`¡ó®UğM˜ü    8   src/presentation/modern_rick_gesture_sprite_v3.gd.remap `©7    I       ò[ä;ƒğ“'c–7    4   src/presentation/modern_rick_gesture_sprite_v3.gdc  À©7          ´ş¸ôüã0A¬ˆñ_6    8   src/presentation/modern_rick_gesture_underpaint.gdshaderà ©7    Ì      ƒš8Ó"Y$±%]Õ*ÖöÀ¤    4   src/presentation/modern_rick_reading_body.gd.remap  À#©7    D       ôÚÕUè{‚à¾Ë
+ïQµ    0   src/presentation/modern_rick_reading_body.gdc    $©7    ê      mßÓ­ZsEá#^¯V¯#
+    4   src/presentation/modern_rick_reading_mask.gdshader   5©7    ô      5HÅ±ÌíD[Ó˜    <   src/presentation/modern_rick_reading_polished_body.gd.remap  8©7    M       EJ^*ÉŸu4]z}ñÄf    8   src/presentation/modern_rick_reading_polished_body.gdc  €8©7    n      ŸMiQÁ.L†!KE?l›ú    4   src/presentation/modern_rick_reading_sprite.gd.remap J©7    F       6[—EÂü¬ÜŸATÒ£¼    0   src/presentation/modern_rick_reading_sprite.gdc `J©7    R      ”Ç˜÷ıÑd1srÂ})    8   src/presentation/modern_rick_signing_sprite_v1.gd.remap ÀV©7    I       ³…JœBxG[Â`õÕ«ã    4   src/presentation/modern_rick_signing_sprite_v1.gdc   W©7          óìh’dÊ¸q<Ğï¡.3Ğ    0   src/presentation/modern_rick_signing_v1.gdshader@b©7    ¹      x“³¿°Q8Â¹âág°    8   src/presentation/modern_rick_singing_sprite_v1.gd.remap  e©7    I       Ki°Úk]¤	yÊZzŞØN³    4   src/presentation/modern_rick_singing_sprite_v1.gdc  `e©7    Ä      `ƒR‚ŠóĞU¬=h—üá5    0   src/presentation/modern_rick_singing_v1.gdshader@n©7    !      ƒ[[B4MĞ1˜<ï    8   src/presentation/modern_rick_wide_listener_v1.gd.remap  €p©7    H       ûB•r'è,¹v~5Ô?    4   src/presentation/modern_rick_wide_listener_v1.gdc   àp©7          ÍçåRØ° S%°Ğ˜FÛÃ    (   src/presentation/modern_sepia.gdshader   t©7    w      9™tÕèÇÈı'ÕÔ€İƒË    8   src/presentation/modern_sheila_cue_sprite_v1.gd.remap   €u©7    G       ñ2÷ÌÉõŒjPkp¿Ÿ(„    0   src/presentation/modern_sheila_cue_sprite_v1.gdcàu©7    s      a4AÊµKø²"ÙÑÙz    4   src/presentation/modern_sheila_palm_body_v1.gd.remap`†©7    F       äÄ÷¨Sí·¢"¹>ÃâåXC    0   src/presentation/modern_sheila_palm_body_v1.gdc À†©7    ì      Â¹@-Ì0?fíœ¯M;    4   src/presentation/modern_sheila_palm_mask.gdshader   À˜©7    ®      û»ô…\ê/£&Ó"m¾`¨    8   src/presentation/modern_sheila_palm_sprite_v1.gd.remap  €œ©7    H       ì,ØçuÅèÈš{Í¾    4   src/presentation/modern_sheila_palm_sprite_v1.gdc   àœ©7    u      şÚ)uî–iÎå×tl·¼    8   src/presentation/modern_sheila_palm_underpaint.gdshader `®©7    ¹      =õqw*¯ô1 s`¼x    ,   src/presentation/modern_speech_cues.gd.remap ²©7    >       ˆtgx$R eKø	ø°¦%    (   src/presentation/modern_speech_cues.gdc `²©7    J      :Şí"·™ŸÏïÛ™”I    4   src/presentation/modern_street12_effects.gd.remap   ÀÀ©7    C       Ä\€yM›-Ö]B`‡    ,   src/presentation/modern_street12_effects.gdc Á©7          ô¨N×é¡Ó<BÈV ÚVV    4   src/presentation/modern_street12_effects.gdshader   @Ğ©7    å      —&WÎúŒ‰~–g¥FÖ    0   src/presentation/modern_street1_effects.gd.remap@Ö©7    B       6ïH€{@ç¦á/É    ,   src/presentation/modern_street1_effects.gdc  Ö©7    n      R­ÈÆzj‘ àg«Õ›s
+    0   src/presentation/modern_street1_effects.gdshader ç©7    Ø      «õİÁ‚¾.*šBR¸¿v›     0   src/presentation/modern_street2_rack.gd.remap    ÷©7    ?       ·OE›¦İõAš{î    (   src/presentation/modern_street2_rack.gdc@÷©7    W      îÎˆÛ;— ?lšDMñš    0   src/presentation/modern_street3_effects.gd.remap ı©7    B       ·ÆÒ7R®8àˆ#N    ,   src/presentation/modern_street3_effects.gdc  ş©7    ë      í¾Ñ_Ñ_›¶v²—)!@    0   src/presentation/modern_street3_effects.gdshader 
+ª7    5      .F˜£È¢Ínè÷?iP    0   src/presentation/modern_street5_pigeons.gd.remap@ª7    B       ¥áÍÁ¿µ]ş˜Gš8    ,   src/presentation/modern_street5_pigeons.gdc  ª7    H	      ÎîØÙu	/­Æ3,Íû    0   src/presentation/modern_street5_pigeons.gdshader ª7    ş	      ÃÎ}$ânÅÌœTB    0   src/presentation/modern_street6_effects.gd.remap "ª7    B       ŞàyF{ÑúèÛÓMƒñ    ,   src/presentation/modern_street6_effects.gdc `"ª7    w	      ©^ğ<) #|ŠPœ(­½š˜    0   src/presentation/modern_street6_effects.gdshaderà+ª7    "      o:ÈèL q©¬9<    0   src/presentation/modern_street_travel.gd.remap   0ª7    @       ´à†âdìâMôèxò    ,   src/presentation/modern_street_travel.gdc   `0ª7    #      Ô£/Ôëë‹¶&áÙ€    ,   src/presentation/modern_susan_body.gd.remap  Iª7    =       u Úµ¿ú °·ü5âd<    (   src/presentation/modern_susan_body.gdc  àIª7    %      Gâd§¤<¿Ö`:À
+tëw    0   src/presentation/modern_susan_counter.gdshader   \ª7    ‰       ¢ªö÷iÖĞ Ë˜á    0   src/presentation/modern_susan_face_gaze.gd.remapÀ\ª7    B       (LiAÀ·&pšÈré»¼    ,   src/presentation/modern_susan_face_gaze.gdc  ]ª7          Ìé-©Èp‰Ë«¹P£Ûñ    0   src/presentation/modern_susan_notebook.gdshader @`ª7    ë      —kKØ·º‚«šÏn¤1ù    4   src/presentation/modern_waterfront_effects.gd.remap @bª7    E       £ã]ûîáMë›Vü    0   src/presentation/modern_waterfront_effects.gdc   bª7    È      Lºº—gò
 Ò+³y
-ùÉ    4   src/presentation/modern_waterfront_effects.gdshader €fª7    C      ‹ÑXÂ6?£;ÈÉ$xÎ•Š    ,   src/presentation/opening_sequence.gd.remap  àiª7    <       †¨åGĞıªİà#âÏ*    (   src/presentation/opening_sequence.gdc    jª7    	      § ¦dÑ˜j.]èRuê    4   src/presentation/original_dialogue_overlay.gd.remap @ëª7    E       jhŸìvšPzéUÑ×ó;    0   src/presentation/original_dialogue_overlay.gdc   ëª7    §"      Ñ<˜Ô¯4Wçä¤—Û^    0   src/presentation/original_game_panels.gd.remap  `«7    @       {Ëóô¹t\pE@’ç€Ucª    ,   src/presentation/original_game_panels.gdc    «7    µI      )âÃªÀ_®@ÂÔe’æ»    (   src/presentation/original_menu.gd.remap `X«7    9       KÌB†Y[ŒKá”µÒr=š    $   src/presentation/original_menu.gdc   X«7    b      ¦üŞ¼µÕ/Âë½ÜS    0   src/presentation/original_score_button.gd.remap  u«7    A       ŠgˆOŞ£ÄšÀ4À;1    ,   src/presentation/original_score_button.gdc  €u«7    ‚	      î,ÉG^ì€N’æŞ–"&    0   src/presentation/original_zoom_overlay.gd.remap  «7    A       +rO'0æ„ÂC,º¸KhÔ    ,   src/presentation/original_zoom_overlay.gdc  €«7    ˆ      w$Á%Œa@”<·¯ü    4   src/presentation/portrait_room_atmosphere.gdshader   «7    ô      
-U„ò [mñ¦v>:Æ`    0   src/presentation/portrait_travel_kit.gd.remap    ‘«7    ?       ªX{bÉH€‚iBp›(1    (   src/presentation/portrait_travel_kit.gdc`‘«7    Ê      <h³º8ÃDØuí¸“ºô    ,   src/presentation/safe_stage_layout.gd.remap @°«7    =       Iö÷Ù\©3Q¦[wÖY    (   src/presentation/safe_stage_layout.gdc  €°«7    ¯      ñ“8ÕÍ”ğ´î_’µSÂ    (   src/presentation/shell_backdrop.gd.remap@´«7    :       #‰ù˜4>CÖ4r›ÔãD€    $   src/presentation/shell_backdrop.gdc €´«7    ~      LhPëÿ¾d½åĞêo“—    (   src/presentation/stage_backdrop.gd.remap »«7    :       ®-šĞóš?»pî·c]S&    $   src/presentation/stage_backdrop.gdc @»«7    n      }œÓôéÆH×W<ø"¥b)    0   src/presentation/street5_vertical_slice.gd.remapÀÆ«7    B       ÿÌ{b
-Ğ'Dô|„q´8    ,   src/presentation/street5_vertical_slice.gdc  Ç«7    ^	      8	ÆU_‚N ®Kª´ĞıĞ       src/ui/game_localization.gd €Ğ«7    ’$      öÌÀÛ§<EË,·Ñÿ`       src/ui/game_localization.gdc õ«7    K      5¢cyü¶:ª¢æšhñ        src/ui/localized_copy.gd.remap  €¬7    0       q¨râ"ŸvVPiR       src/ui/localized_copy.gdc   À¬7    28      ­_-| ‘Rì% ùÍ        src/ui/native_touch_scroll.gd    I¬7    ä      [dÏ‰şN:$õİ    $   src/ui/retro_flower_stamp.gd.remap   V¬7    4       ×¬§ÄIP#C’ùëU’¹        src/ui/retro_flower_stamp.gdc   @V¬7          šØ²…İ2iH¢ELšªK§        src/ui/theme_factory.gd.remap   àY¬7    /       àÛ›e“+9ù%ª*ZC·       src/ui/theme_factory.gdc Z¬7    2      B½á[™Ö˜ş–\Ü–¦à"       src/ui/web_layout.gd.remap  `p¬7    ,       Òhkã*S§Ï?T·Ê-z       src/ui/web_layout.gdc    p¬7    Ï	      ’Æ³3M6I]7'—š©`ä    $   tools/build_modern_evidence.gd.remap€z¬7    6       JjGİ*X‰µc_7¦        tools/build_modern_evidence.gdc Àz¬7    ›      ‹å˜¸Å
+ùÉ    4   src/presentation/modern_waterfront_effects.gdshader €gª7    C      ‹ÑXÂ6?£;ÈÉ$xÎ•Š    ,   src/presentation/opening_sequence.gd.remap  àjª7    <       †¨åGĞıªİà#âÏ*    (   src/presentation/opening_sequence.gdc    kª7    	      § ¦dÑ˜j.]èRuê    4   src/presentation/original_dialogue_overlay.gd.remap @ìª7    E       jhŸìvšPzéUÑ×ó;    0   src/presentation/original_dialogue_overlay.gdc   ìª7    §"      Ñ<˜Ô¯4Wçä¤—Û^    0   src/presentation/original_game_panels.gd.remap  `«7    @       {Ëóô¹t\pE@’ç€Ucª    ,   src/presentation/original_game_panels.gdc    «7    µI      )âÃªÀ_®@ÂÔe’æ»    (   src/presentation/original_menu.gd.remap `Y«7    9       KÌB†Y[ŒKá”µÒr=š    $   src/presentation/original_menu.gdc   Y«7    b      ¦üŞ¼µÕ/Âë½ÜS    0   src/presentation/original_score_button.gd.remap  v«7    A       ŠgˆOŞ£ÄšÀ4À;1    ,   src/presentation/original_score_button.gdc  €v«7    ‚	      î,ÉG^ì€N’æŞ–"&    0   src/presentation/original_zoom_overlay.gd.remap  €«7    A       +rO'0æ„ÂC,º¸KhÔ    ,   src/presentation/original_zoom_overlay.gdc  €€«7    ˆ      w$Á%Œa@”<·¯ü    4   src/presentation/portrait_room_atmosphere.gdshader   «7    ô      
+U„ò [mñ¦v>:Æ`    0   src/presentation/portrait_travel_kit.gd.remap    ’«7    ?       ªX{bÉH€‚iBp›(1    (   src/presentation/portrait_travel_kit.gdc`’«7    Ê      <h³º8ÃDØuí¸“ºô    ,   src/presentation/safe_stage_layout.gd.remap @±«7    =       Iö÷Ù\©3Q¦[wÖY    (   src/presentation/safe_stage_layout.gdc  €±«7    ¯      ñ“8ÕÍ”ğ´î_’µSÂ    (   src/presentation/shell_backdrop.gd.remap@µ«7    :       #‰ù˜4>CÖ4r›ÔãD€    $   src/presentation/shell_backdrop.gdc €µ«7    ~      LhPëÿ¾d½åĞêo“—    (   src/presentation/stage_backdrop.gd.remap ¼«7    :       ®-šĞóš?»pî·c]S&    $   src/presentation/stage_backdrop.gdc @¼«7    n      }œÓôéÆH×W<ø"¥b)    0   src/presentation/street5_vertical_slice.gd.remapÀÇ«7    B       ÿÌ{b
+Ğ'Dô|„q´8    ,   src/presentation/street5_vertical_slice.gdc  È«7    ^	      8	ÆU_‚N ®Kª´ĞıĞ       src/ui/game_localization.gd €Ñ«7    ’$      öÌÀÛ§<EË,·Ñÿ`       src/ui/game_localization.gdc ö«7    K      5¢cyü¶:ª¢æšhñ        src/ui/localized_copy.gd.remap  €¬7    0       q¨râ"ŸvVPiR       src/ui/localized_copy.gdc   À¬7    28      ­_-| ‘Rì% ùÍ        src/ui/native_touch_scroll.gd    J¬7    ä      [dÏ‰şN:$õİ    $   src/ui/retro_flower_stamp.gd.remap   W¬7    4       ×¬§ÄIP#C’ùëU’¹        src/ui/retro_flower_stamp.gdc   @W¬7          šØ²…İ2iH¢ELšªK§        src/ui/theme_factory.gd.remap   àZ¬7    /       àÛ›e“+9ù%ª*ZC·       src/ui/theme_factory.gdc [¬7    2      B½á[™Ö˜ş–\Ü–¦à"       src/ui/web_layout.gd.remap  `q¬7    ,       Òhkã*S§Ï?T·Ê-z       src/ui/web_layout.gdc    q¬7    Ï	      ’Æ³3M6I]7'—š©`ä    $   tools/build_modern_evidence.gd.remap€{¬7    6       JjGİ*X‰µc_7¦        tools/build_modern_evidence.gdc À{¬7    ›      ‹å˜¸Å
 ğhpÈ­è™    

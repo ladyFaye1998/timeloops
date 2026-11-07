@@ -1,6 +1,6 @@
 import { installChunkFetch } from './chunk-fetch.5db43716d7a11a9b9c2b75a2ec4e8cf37bcd11454bcb1573c860c0b38619e9ca.mjs';
 import { installAudioUnlock } from './audio-unlock.dfc0ba3caa3f4dbaca0bc6b570f0b5dd5df98b2b202b9aaf6d593089605f275e.mjs';
-import { installLanguagePicker } from './languages.f2ef5e898743e674cd634fecd2cdaf111b6153a05fc098b1fb67fccebae39327.mjs';
+import { installLanguagePicker } from './languages.758b50e42056d9a4b99e79e1dd637c43fe961b60f11d4170860a60e7b8a189cd.mjs';
 
 const config = JSON.parse(document.getElementById('game-config').textContent);
 const boot = JSON.parse(document.getElementById('web-config').textContent);
