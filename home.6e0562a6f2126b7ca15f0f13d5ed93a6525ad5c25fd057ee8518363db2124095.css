@@ -50,9 +50,9 @@
 .julia-home__date:hover { color: #fff9e9; text-shadow: 0 0 8px #ffb879; }
 .julia-home__loading { display: grid; gap: 7px; margin: 12px 8px 0; color: #ffe7bf; font: 12px/1.35 HomeNoto, system-ui, sans-serif; text-align: center; }
 .julia-home__loading progress { width: 100%; height: 4px; accent-color: #ef8b66; }
-.julia-home__loading:has(.julia-home__loading-flower) { grid-template-columns: 28px minmax(0, 1fr); column-gap: 10px; text-align: start; }
+.julia-home__loading:has(.julia-home__loading-flower) { grid-template-columns: 36px minmax(0, 1fr); column-gap: 10px; text-align: start; }
 .julia-home__loading:has(.julia-home__loading-flower) > span, .julia-home__loading:has(.julia-home__loading-flower) > progress { grid-column: 2; }
-.julia-home .julia-home__loading-flower { grid-column: 1; grid-row: 1 / span 2; align-self: center; width: 28px; height: 28px; object-fit: contain; }
+.julia-home .julia-home__loading-flower { grid-column: 1; grid-row: 1 / span 2; align-self: center; width: 36px; height: 36px; object-fit: contain; }
 .julia-home .julia-home__loading-flower--static { display: none; }
 .julia-home[data-reduced-motion="true"] .julia-home__loading-flower--animated { display: none; }
 .julia-home[data-reduced-motion="true"] .julia-home__loading-flower--static { display: block; }
